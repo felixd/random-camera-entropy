@@ -3,6 +3,10 @@
 Ekspozycja: 7000 
 FPS: 5 lub 10
 
+Max ekspozycja: 7000
+Ekspozycja 2000 -> ~~FPS 5
+Ekspozycja 1000 -> ~~FPS 10 ???
+
 Przykładowy start: 
 
 ```bash
