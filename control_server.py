@@ -45,7 +45,9 @@ from flask import (
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash
 
-APP_VERSION = "2026.08.01.camera-entropy-distributed-control.7.6.1"
+from spatial_docs import register_documentation_routes
+# CAMERA_ENTROPY_SPATIAL_V7_7
+APP_VERSION = "2026.08.02.camera-entropy-distributed-control.7.7.0"
 ALLOWED_PROFILES = {
     "smoke": "smoke_preproduction.sh",
     "temporal-sha3": "smoke_temporal_sha3.sh",
@@ -53,11 +55,99 @@ ALLOWED_PROFILES = {
     "qualification": "qualification_preproduction.sh",
     "cold-start": "qualification_cold_start_run.sh",
     "spatial-phases": "smoke_checkerboard_phases.sh",
+    "spatial-baseline": "smoke_spatial_baseline.sh",
+    "spatial-checker-even": "smoke_spatial_checkerboard_even.sh",
+    "spatial-checker-odd": "smoke_spatial_checkerboard_odd.sh",
+    "spatial-grid2": "smoke_spatial_grid_2x2.sh",
+    "spatial-grid4": "smoke_spatial_grid_4x4.sh",
+    "spatial-block4": "smoke_spatial_block_4x4_phase_1_2.sh",
+    "spatial-offset11": "smoke_spatial_offset_diagonal_1.sh",
+    "spatial-offset22": "smoke_spatial_offset_diagonal_2.sh",
+    "spatial-serpentine": "smoke_spatial_serpentine.sh",
+    "spatial-tile16": "smoke_spatial_tile_interleave_16.sh",
+    "spatial-campaign": "smoke_spatial_profiles.sh",
     "dual-weave": "smoke_dual_weave.sh",
     "dual-weave-stagger2": "smoke_dual_weave_stagger2.sh",
     "dual-weave-lags": "smoke_dual_weave_lags.sh",
     "dual-weave-stagger-qualification": "qualification_dual_weave_stagger.sh",
 }
+
+PROFILE_LABELS = {
+    "smoke": "Smoke — klasyczny VN + SHA3",
+    "temporal-sha3": "Temporal SHA3 — uproszczony tor",
+    "single": "Pojedynczy przebieg",
+    "qualification": "Kwalifikacja",
+    "cold-start": "Kwalifikacja po zimnym starcie",
+    "spatial-phases": "Checkerboard phases smoke",
+    "spatial-baseline": "Spatial — baseline full / row-major",
+    "spatial-checker-even": "Spatial — checkerboard even",
+    "spatial-checker-odd": "Spatial — checkerboard odd",
+    "spatial-grid2": "Spatial — grid 2×2",
+    "spatial-grid4": "Spatial — grid 4×4",
+    "spatial-block4": "Spatial — block 4×4, faza (1,2)",
+    "spatial-offset11": "Spatial — offset XOR (+1,+1)",
+    "spatial-offset22": "Spatial — offset XOR (+2,+2)",
+    "spatial-serpentine": "Spatial — serializacja serpentine",
+    "spatial-tile16": "Spatial — tile interleave 16×16",
+    "spatial-campaign": "Spatial — pełna kampania porównawcza",
+    "dual-weave": "Dual weave — równoległy smoke",
+    "dual-weave-stagger2": "Dual weave — row-major / stagger-2",
+    "dual-weave-lags": "Dual weave — kampania lagów",
+    "dual-weave-stagger-qualification": "Dual weave — kwalifikacja stagger-2",
+}
+
+PROFILE_HELP = {
+    "spatial-baseline": "Pełna zamrożona maska, brak offsetu, kolejność row-major. Punkt odniesienia.",
+    "spatial-checker-even": "Jedna faza szachownicy; usuwa bezpośrednie sąsiedztwo poziome i pionowe.",
+    "spatial-checker-odd": "Komplementarna faza szachownicy do porównania asymetrii matrycy/ISP.",
+    "spatial-grid2": "Jeden piksel z każdego bloku 2×2, faza (0,0).",
+    "spatial-grid4": "Jeden piksel z każdego bloku 4×4, faza (0,0). Mocniejsze przerzedzenie.",
+    "spatial-block4": "Jedna ustalona lokalna pozycja (1,2) w każdym bloku 4×4.",
+    "spatial-offset11": "XOR bieżącego piksela ze starszym pikselem przesuniętym o +1,+1; bez zawijania.",
+    "spatial-offset22": "XOR ze starszym pikselem przesuniętym o +2,+2; bez zawijania.",
+    "spatial-serpentine": "Pełna maska, ale co drugi wiersz jest serializowany w przeciwną stronę.",
+    "spatial-tile16": "Pełna maska; kolejne bity pochodzą z tej samej pozycji lokalnej w odległych kaflach 16×16.",
+    "spatial-campaign": "Uruchamia wszystkie profile przestrzenne kolejno i buduje wspólny indeks raportów.",
+}
+
+PARAMETER_HELP = {
+    "source_id": "Zdefiniowane po stronie serwera źródło V4L2, TLS-Y albo RTSP. Dane uwierzytelniające nie trafiają do przeglądarki.",
+    "profile": "Gotowy zestaw parametrów i rozmiarów testu. Profile spatial wymuszają opisaną geometrię.",
+    "exposure": "Ręczna ekspozycja źródła. Zmiana wpływa na fizykę źródła i wymaga nowej kalibracji.",
+    "pair_lag_frames": "Odstęp czasowy k pomiędzy ramkami. To nie jest odległość pomiędzy pikselami.",
+    "spatial_sampling": "Starsza opcja zgodności. Jest używana tylko przy spatial_mask_pattern=legacy.",
+    "spatial_mask_pattern": "Właściwa maska produkcyjna: legacy, full, checkerboard, grid albo block.",
+    "spatial_step_x": "Poziomy krok siatki. Dla 4 wybierana jest jedna klasa słupków modulo 4.",
+    "spatial_step_y": "Pionowy krok siatki.",
+    "spatial_phase_x": "Wybrana klasa modulo X albo lokalna pozycja X w bloku.",
+    "spatial_phase_y": "Wybrana klasa modulo Y albo lokalna pozycja Y w bloku.",
+    "spatial_block_width": "Szerokość bloku dla wzorca block.",
+    "spatial_block_height": "Wysokość bloku dla wzorca block.",
+    "temporal_spatial_offset_x": "Porównuje Y_t(x,y) z Y_(t-k)(x+dx,y+dy). Krawędzie są odrzucane, nigdy zawijane.",
+    "temporal_spatial_offset_y": "Pionowa składowa przesunięcia starszego piksela.",
+    "serialization_order": "Kolejność bitów przed VN/SHA3. Reordering nie tworzy entropii i nie zastępuje conditionera.",
+    "serialization_tile_width": "Szerokość kafla dla tile-interleave.",
+    "serialization_tile_height": "Wysokość kafla dla tile-interleave.",
+    "conditioner_input_bits": "Liczba surowych bitów kompresowanych do jednego wyniku SHA3-512.",
+    "warmup_seconds": "Czas stabilizacji źródła przed kalibracją. Wyjście jest w tym czasie zablokowane.",
+    "calibration_pairs": "Liczba par ramek użyta do wyznaczenia i zamrożenia aktywnej maski pikseli.",
+    "conditioned_mib": "Docelowy rozmiar finalnego strumienia SHA3-512.",
+    "diagnostic_vn_mib": "Rozmiar równoległego wyniku Von Neumanna. Jest diagnostyczny.",
+    "validation_mib": "Limit plików walidacyjnych przed conditionerem.",
+    "runs": "Liczba przebiegów używana przez profile kwalifikacyjne.",
+    "first_warmup_seconds": "Warm-up pierwszego przebiegu kampanii.",
+    "next_warmup_seconds": "Warm-up kolejnych przebiegów kampanii.",
+    "live_heatmap_interval_seconds": "Interwał zapisu zbiorczej heatmapy PNG; 0 wyłącza zapis.",
+    "live_heatmap_max_stages": "Maksymalna liczba etapów pipeline pokazywanych jednocześnie.",
+    "live_heatmap_min_bytes": "Minimalna liczba bajtów etapu przed renderowaniem heatmapy.",
+    "source_frame_timeout_seconds": "Maksymalny czas oczekiwania na następną ramkę TLS-Y.",
+    "source_reconnect_attempts": "Liczba prób ponownego połączenia przed produkcją.",
+    "source_reconnect_backoff_seconds": "Przerwa pomiędzy próbami ponownego połączenia.",
+    "web_images": "Generuje obrazy podglądu workera; zwiększa narzut CPU i I/O.",
+    "mask_snapshot_images": "Archiwizuje okresowe obrazy masek i ich różnic.",
+    "live_byte_diagnostics": "Włącza histogramy bajtów i bieżące heatmapy etapów pipeline.",
+}
+
 ALLOWED_SPATIAL = {
     "full",
     "checkerboard",
@@ -320,11 +410,66 @@ class JobManager:
         if source_reconnect_backoff is not None:
             env["SOURCE_RECONNECT_BACKOFF_SECONDS"] = str(source_reconnect_backoff)
 
+        spatial_mask_pattern = str(payload.get("spatial_mask_pattern", "")).strip()
+        if spatial_mask_pattern:
+            if spatial_mask_pattern not in {"legacy", "full", "checkerboard-even", "checkerboard-odd", "grid", "block"}:
+                raise ValueError("invalid spatial_mask_pattern")
+            env["SPATIAL_MASK_PATTERN"] = spatial_mask_pattern
+        serialization_order = str(payload.get("serialization_order", "")).strip()
+        if serialization_order:
+            if serialization_order not in {"row-major", "serpentine", "tile-interleave"}:
+                raise ValueError("invalid serialization_order")
+            env["SERIALIZATION_ORDER"] = serialization_order
+        for payload_key, env_key, minimum, maximum in (
+            ("spatial_step_x", "SPATIAL_STEP_X", 1, 4096),
+            ("spatial_step_y", "SPATIAL_STEP_Y", 1, 4096),
+            ("spatial_phase_x", "SPATIAL_PHASE_X", 0, 4095),
+            ("spatial_phase_y", "SPATIAL_PHASE_Y", 0, 4095),
+            ("spatial_block_width", "SPATIAL_BLOCK_WIDTH", 1, 4096),
+            ("spatial_block_height", "SPATIAL_BLOCK_HEIGHT", 1, 4096),
+            ("serialization_tile_width", "SERIALIZATION_TILE_WIDTH", 1, 4096),
+            ("serialization_tile_height", "SERIALIZATION_TILE_HEIGHT", 1, 4096),
+        ):
+            raw = str(payload.get(payload_key, "")).strip()
+            if raw:
+                try:
+                    number = int(raw)
+                except ValueError as exc:
+                    raise ValueError(f"{payload_key} must be an integer") from exc
+                if not minimum <= number <= maximum:
+                    raise ValueError(f"{payload_key} must be in [{minimum}, {maximum}]")
+                env[env_key] = str(number)
+        for payload_key, env_key in (
+            ("temporal_spatial_offset_x", "TEMPORAL_SPATIAL_OFFSET_X"),
+            ("temporal_spatial_offset_y", "TEMPORAL_SPATIAL_OFFSET_Y"),
+        ):
+            raw = str(payload.get(payload_key, "")).strip()
+            if raw:
+                try:
+                    number = int(raw)
+                except ValueError as exc:
+                    raise ValueError(f"{payload_key} must be an integer") from exc
+                if not -4096 <= number <= 4096:
+                    raise ValueError(f"{payload_key} must be in [-4096, 4096]")
+                env[env_key] = str(number)
+
         spatial = str(payload.get("spatial_sampling", "")).strip()
         if spatial:
             if spatial not in ALLOWED_SPATIAL:
                 raise ValueError("Nieobsługiwane spatial_sampling")
             env["SPATIAL_SAMPLING"] = spatial
+
+        pattern = env.get("SPATIAL_MASK_PATTERN", "legacy")
+        step_x = int(env.get("SPATIAL_STEP_X", "1"))
+        step_y = int(env.get("SPATIAL_STEP_Y", "1"))
+        phase_x = int(env.get("SPATIAL_PHASE_X", "0"))
+        phase_y = int(env.get("SPATIAL_PHASE_Y", "0"))
+        block_width = int(env.get("SPATIAL_BLOCK_WIDTH", "4"))
+        block_height = int(env.get("SPATIAL_BLOCK_HEIGHT", "4"))
+        if pattern == "grid" and (phase_x >= step_x or phase_y >= step_y):
+            raise ValueError("Dla grid faza X/Y musi być mniejsza od kroku X/Y")
+        if pattern == "block" and (phase_x >= block_width or phase_y >= block_height):
+            raise ValueError("Dla block faza X/Y musi mieścić się w bloku")
 
         for field, env_name in (
             ("diagnostic_vn_mib", "DIAGNOSTIC_VN_BYTES"),
@@ -336,7 +481,7 @@ class JobManager:
                 env[env_name] = str(mib * MIB)
 
         slug = f"web-{profile}-{timestamp_slug()}-{job_id[:8]}"
-        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification"}:
+        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign"}:
             env["CAMPAIGN"] = slug
             output_root = self.settings.data_root / slug
         else:
@@ -560,11 +705,12 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         failed = path / "run_failed.json"
         qualification = path / "qualification_report.html"
         dual_campaign = path / "dual_weave_campaign_report.html"
+        spatial_campaign = path / "spatial_campaign_report.html"
         report = path / "run_report.html"
         status = "running/incomplete"
         if failed.exists():
             status = "failed"
-        elif qualification.exists() or dual_campaign.exists():
+        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists():
             status = "complete"
         elif ready.exists():
             status = "ready"
@@ -575,6 +721,8 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             if qualification.exists()
             else f"/data/{path.name}/dual_weave_campaign_report.html"
             if dual_campaign.exists()
+            else f"/data/{path.name}/spatial_campaign_report.html"
+            if spatial_campaign.exists()
             else f"/data/{path.name}/run_report.html"
             if report.exists()
             else None
@@ -582,10 +730,18 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         report_label = (
             "Kwalifikacja" if qualification.exists() else
             "Dual weave campaign" if dual_campaign.exists() else
+            "Spatial campaign" if spatial_campaign.exists() else
             "Raport przebiegu" if report.exists() else "Brak raportu"
         )
         headline = ""
-        if dual_campaign.exists():
+        if spatial_campaign.exists():
+            campaign_summary = read_json_object(path / "spatial_campaign_summary.json")
+            completed = campaign_summary.get("complete_profiles")
+            total = campaign_summary.get("total_profiles")
+            failed_profiles = campaign_summary.get("failed_profiles")
+            if completed is not None:
+                headline = f"complete {completed}/{total if total is not None else '—'} · failed {failed_profiles if failed_profiles is not None else '—'}"
+        elif dual_campaign.exists():
             campaign_summary = read_json_object(path / "dual_weave_campaign_summary.json")
             best = campaign_summary.get("diagnostic_best", {}) if isinstance(campaign_summary.get("diagnostic_best"), dict) else {}
             if best:
@@ -749,7 +905,15 @@ def create_app(settings: Settings) -> Flask:
             version=APP_VERSION,
             csrf_token=auth.csrf(),
             sources=[redact_source(item) for item in sources],
-            profiles=sorted(ALLOWED_PROFILES),
+            profiles=[
+                {
+                    "id": profile_id,
+                    "label": PROFILE_LABELS.get(profile_id, profile_id),
+                    "help": PROFILE_HELP.get(profile_id, ""),
+                }
+                for profile_id in ALLOWED_PROFILES
+            ],
+            parameter_help=PARAMETER_HELP,
             worker_port=settings.worker_port,
             share_url=(f"/share/{share_token}/" if share_token else None),
         )
@@ -961,6 +1125,7 @@ def create_app(settings: Settings) -> Flask:
             csrf_token=auth.csrf(),
         )
 
+    register_documentation_routes(app, settings.root)
     return app
 
 

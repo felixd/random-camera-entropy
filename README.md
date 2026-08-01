@@ -1,4 +1,15 @@
-# Camera Entropy Distributed v7.6.1
+# Camera Entropy Distributed v7.7.0
+
+
+## Korelacja przestrzenna, maski i dokumentacja v7.7.0
+
+Wersja 7.7.0 dodaje konfigurowalne maski `full`, obie fazy checkerboard, ogólną siatkę `grid`, wybór jednej pozycji z bloku `block`, przestrzenny offset temporalnego XOR oraz kolejności `row-major`, `serpentine` i `tile-interleave`.
+
+Offset jest stosowany spójnie do temporalnego XOR, kalibracji, clippingu, shadow maski i walidacji. Krawędzie są odrzucane bez zawijania. Indeksy serializacji są cache'owane, dzięki czemu `tile-interleave` nie sortuje całej matrycy przy każdej ramce.
+
+Panel WWW zawiera dziesięć profili przestrzennych i kampanię zbiorczą. Każde pole ma pomoc kontekstową dostępną przez hover i fokus klawiatury. Wszystkie pliki README, Markdown i tekstowe instrukcje są dostępne po zalogowaniu pod `/docs/`.
+
+Pełny opis parametrów i zasad interpretacji znajduje się w [SPATIAL_SAMPLING.md](SPATIAL_SAMPLING.md).
 
 
 ## Odporność transportu TLS-Y v7.6.1
@@ -76,12 +87,13 @@ Za reverse proxy strona jest dostępna pod adresem skonfigurowanym w Nginx, np. 
 
 - uruchomienie profilu `smoke`, uproszczonego `temporal-sha3`, pojedynczego przebiegu, kwalifikacji, cold-start, checkerboard phases oraz testów `dual-weave`, w tym skupionego `dual-weave-stagger2`;
 - wybór uprzednio skonfigurowanego źródła `v4l2`, `tls-y` lub `rtsp`;
-- ustawienie ekspozycji, lagu ramek, próbkowania przestrzennego, rozmiaru conditionera i limitów danych;
+- ustawienie ekspozycji, lagu ramek, masek przestrzennych, offsetu pikseli, serializacji, rozmiaru conditionera i limitów danych;
 - zatrzymanie całej grupy procesów testu;
 - ciągły log zadania;
 - podgląd panelu aktywnego workera przez `/live`;
 - historia zadań;
 - przeglądanie i pobieranie wyników pod `/data/`;
+- przeglądanie dokumentacji projektu pod `/docs/` oraz pomoc kontekstowa przy parametrach;
 - raport `run_report.html` generowany dla każdego ukończonego przebiegu;
 - raport kampanii `qualification_report.html` dla kwalifikacji.
 
@@ -120,7 +132,7 @@ Generowanie klatki, kanału Y, mapy LSB i masek w panelu workera jest domyślnie
 
 Wyłączenie PNG masek nie wyłącza metryk dryftu, CSV, JSON ani wykresu Plotly. Dzięki temu kontrola retencji/Jaccarda nadal działa bez kosztu kodowania i przesyłania obrazów.
 
-## Raporty i diagnostyka live v7.6.1
+## Raporty i diagnostyka live v7.7.0
 
 Raporty są teraz projektowane jako krótki panel decyzyjny, a nie surowy zrzut wszystkich pól. Najważniejsze metryki i werdykt znajdują się na górze, a pełne tabele pozostają w sekcjach rozwijanych.
 
@@ -700,6 +712,12 @@ frame_transport.py           protokół i konfiguracja mTLS
 frame_sources.py             V4L2 / TLS-Y / RTSP
 camera_entropy_server.py     cały pipeline obliczeniowy
 smoke_temporal_sha3.sh       temporal LSB + pełna maska + health tests + SHA3-512
+spatial_sampling.py          maski, offset bez wrap-around i serializacja bitów
+spatial_profile.sh           wspólna baza profili geometrii przestrzennej
+smoke_spatial_profiles.sh    pełna kampania porównawcza wszystkich profili przestrzennych
+summarize_spatial_campaign.py  indeks JSON/HTML kampanii przestrzennej
+spatial_docs.py              chroniona przeglądarka README/Markdown/instrukcji pod /docs/
+SPATIAL_SAMPLING.md          pełna dokumentacja parametrów i interpretacji wyników
 smoke_dual_weave.sh          same-group kontra stagger-1/stagger-2
 smoke_dual_weave_stagger2.sh skupiony kandydat row-major / stagger-2
 smoke_dual_weave_lags.sh     kampania k4/k2/k8/k4: same-group kontra stagger-2
@@ -712,7 +730,7 @@ run_one.sh                   wspólny runner obliczeniowy
 generate_mtls_pki.sh         lokalne CA i certyfikaty
 ```
 
-## Ograniczenia v7.6.1
+## Ograniczenia v7.7.0
 
 - jedna instancja przetwarza jedno źródło;
 - agent USB obsługuje jednego klienta naraz;

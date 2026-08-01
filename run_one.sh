@@ -20,6 +20,19 @@ EXPOSURE="${EXPOSURE:-7000}"
 PAIRING_MODE="${PAIRING_MODE:-disjoint}"
 PAIR_LAG_FRAMES="${PAIR_LAG_FRAMES:-4}"
 SPATIAL_SAMPLING="${SPATIAL_SAMPLING:-checkerboard-even}"
+# CAMERA_ENTROPY_SPATIAL_V7_7
+SPATIAL_MASK_PATTERN="${SPATIAL_MASK_PATTERN:-legacy}"
+SPATIAL_STEP_X="${SPATIAL_STEP_X:-1}"
+SPATIAL_STEP_Y="${SPATIAL_STEP_Y:-1}"
+SPATIAL_PHASE_X="${SPATIAL_PHASE_X:-0}"
+SPATIAL_PHASE_Y="${SPATIAL_PHASE_Y:-0}"
+SPATIAL_BLOCK_WIDTH="${SPATIAL_BLOCK_WIDTH:-4}"
+SPATIAL_BLOCK_HEIGHT="${SPATIAL_BLOCK_HEIGHT:-4}"
+TEMPORAL_SPATIAL_OFFSET_X="${TEMPORAL_SPATIAL_OFFSET_X:-0}"
+TEMPORAL_SPATIAL_OFFSET_Y="${TEMPORAL_SPATIAL_OFFSET_Y:-0}"
+SERIALIZATION_ORDER="${SERIALIZATION_ORDER:-row-major}"
+SERIALIZATION_TILE_WIDTH="${SERIALIZATION_TILE_WIDTH:-16}"
+SERIALIZATION_TILE_HEIGHT="${SERIALIZATION_TILE_HEIGHT:-16}"
 SPATIAL_COMPARISON="${SPATIAL_COMPARISON:-0}"
 DUAL_WEAVE_COMPARISON="${DUAL_WEAVE_COMPARISON:-0}"
 DUAL_WEAVE_ORDERS="${DUAL_WEAVE_ORDERS:-row-major}"
@@ -55,6 +68,26 @@ for value in "$DIAGNOSTIC_VN_BYTES" "$CONDITIONED_BYTES" "$VALIDATION_BYTES"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Rozmiary wyjścia muszą być liczbami całkowitymi"
 done
 [[ "$SOURCE_TYPE" =~ ^(v4l2|tls-y|rtsp)$ ]] || fail "SOURCE_TYPE=v4l2, tls-y albo rtsp"
+[[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
+[[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"
+for value in "$SPATIAL_STEP_X" "$SPATIAL_STEP_Y" "$SPATIAL_PHASE_X" "$SPATIAL_PHASE_Y" "$SPATIAL_BLOCK_WIDTH" "$SPATIAL_BLOCK_HEIGHT" "$SERIALIZATION_TILE_WIDTH" "$SERIALIZATION_TILE_HEIGHT"; do
+    [[ "$value" =~ ^[0-9]+$ ]] || fail "Parametry maski i kafli muszą być nieujemnymi liczbami całkowitymi"
+done
+for value in "$TEMPORAL_SPATIAL_OFFSET_X" "$TEMPORAL_SPATIAL_OFFSET_Y"; do
+    [[ "$value" =~ ^-?[0-9]+$ ]] || fail "Offsety przestrzenne muszą być liczbami całkowitymi"
+done
+(( SPATIAL_STEP_X >= 1 && SPATIAL_STEP_Y >= 1 )) || fail "SPATIAL_STEP_X/Y muszą być >= 1"
+(( SPATIAL_BLOCK_WIDTH >= 1 && SPATIAL_BLOCK_HEIGHT >= 1 )) || fail "SPATIAL_BLOCK_WIDTH/HEIGHT muszą być >= 1"
+(( SERIALIZATION_TILE_WIDTH >= 1 && SERIALIZATION_TILE_HEIGHT >= 1 )) || fail "SERIALIZATION_TILE_WIDTH/HEIGHT muszą być >= 1"
+if [[ "$SPATIAL_MASK_PATTERN" == grid ]]; then
+    (( SPATIAL_PHASE_X < SPATIAL_STEP_X && SPATIAL_PHASE_Y < SPATIAL_STEP_Y )) || fail "Dla grid faza musi być mniejsza od kroku"
+fi
+if [[ "$SPATIAL_MASK_PATTERN" == block ]]; then
+    (( SPATIAL_PHASE_X < SPATIAL_BLOCK_WIDTH && SPATIAL_PHASE_Y < SPATIAL_BLOCK_HEIGHT )) || fail "Dla block faza musi mieścić się w bloku"
+fi
+if [[ "$SPATIAL_COMPARISON" == 1 && "$SPATIAL_MASK_PATTERN" != legacy ]]; then
+    fail "SPATIAL_COMPARISON=1 obsługuje stałe warianty zgodności; własne maski uruchamiaj jako osobne profile"
+fi
 [[ "$SPATIAL_COMPARISON" == 0 || "$SPATIAL_COMPARISON" == 1 ]] || fail "SPATIAL_COMPARISON=0 albo 1"
 [[ "$DUAL_WEAVE_COMPARISON" == 0 || "$DUAL_WEAVE_COMPARISON" == 1 ]] || fail "DUAL_WEAVE_COMPARISON=0 albo 1"
 [[ "$BINARY_GEOMETRY_REPORT" == 0 || "$BINARY_GEOMETRY_REPORT" == 1 ]] || fail "BINARY_GEOMETRY_REPORT=0 albo 1"
@@ -167,6 +200,15 @@ command=(
     --thermal-warmup-seconds "$WARMUP_SECONDS"
     --pairing-mode "$PAIRING_MODE" --pair-lag-frames "$PAIR_LAG_FRAMES"
     --spatial-sampling "$SPATIAL_SAMPLING" "$comparison_flag"
+    --spatial-mask-pattern "$SPATIAL_MASK_PATTERN"
+    --spatial-step-x "$SPATIAL_STEP_X" --spatial-step-y "$SPATIAL_STEP_Y"
+    --spatial-phase-x "$SPATIAL_PHASE_X" --spatial-phase-y "$SPATIAL_PHASE_Y"
+    --spatial-block-width "$SPATIAL_BLOCK_WIDTH" --spatial-block-height "$SPATIAL_BLOCK_HEIGHT"
+    --temporal-spatial-offset-x "$TEMPORAL_SPATIAL_OFFSET_X"
+    --temporal-spatial-offset-y "$TEMPORAL_SPATIAL_OFFSET_Y"
+    --serialization-order "$SERIALIZATION_ORDER"
+    --serialization-tile-width "$SERIALIZATION_TILE_WIDTH"
+    --serialization-tile-height "$SERIALIZATION_TILE_HEIGHT"
     "$dual_weave_flag" --dual-weave-orders "$DUAL_WEAVE_ORDERS"
     --dual-weave-alignments "$DUAL_WEAVE_ALIGNMENTS"
     --calibration-pairs "$CALIBRATION_PAIRS"
@@ -200,6 +242,18 @@ cat > "$RUN_DIR/runner_config.json" <<JSON
   "pairing_mode": "$PAIRING_MODE",
   "pair_lag_frames": $PAIR_LAG_FRAMES,
   "spatial_sampling": "$SPATIAL_SAMPLING",
+  "spatial_mask_pattern": "$SPATIAL_MASK_PATTERN",
+  "spatial_step_x": $SPATIAL_STEP_X,
+  "spatial_step_y": $SPATIAL_STEP_Y,
+  "spatial_phase_x": $SPATIAL_PHASE_X,
+  "spatial_phase_y": $SPATIAL_PHASE_Y,
+  "spatial_block_width": $SPATIAL_BLOCK_WIDTH,
+  "spatial_block_height": $SPATIAL_BLOCK_HEIGHT,
+  "temporal_spatial_offset_x": $TEMPORAL_SPATIAL_OFFSET_X,
+  "temporal_spatial_offset_y": $TEMPORAL_SPATIAL_OFFSET_Y,
+  "serialization_order": "$SERIALIZATION_ORDER",
+  "serialization_tile_width": $SERIALIZATION_TILE_WIDTH,
+  "serialization_tile_height": $SERIALIZATION_TILE_HEIGHT,
   "spatial_comparison": $SPATIAL_COMPARISON,
   "dual_weave_comparison": $DUAL_WEAVE_COMPARISON,
   "dual_weave_orders": "$DUAL_WEAVE_ORDERS",

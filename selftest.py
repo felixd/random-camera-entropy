@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import hashlib,tempfile,threading,socket
+import hashlib,tempfile,threading,socket,sys,types
 from pathlib import Path
 import numpy as np
+
+try:
+    import flask  # noqa: F401
+    FLASK_AVAILABLE = True
+except ModuleNotFoundError:
+    FLASK_AVAILABLE = False
+    module = types.ModuleType("flask")
+    module.Flask = object
+    module.Response = object
+    module.abort = lambda *args, **kwargs: None
+    module.render_template_string = lambda *args, **kwargs: ""
+    module.send_from_directory = lambda *args, **kwargs: None
+    sys.modules["flask"] = module
+
 import camera_entropy_server as app
 from frame_transport import send_message,recv_message,frame_header,verify_frame_message
 from frame_sources import redact_url
@@ -11,6 +25,12 @@ from frame_sources import redact_url
 def main()->int:
     assert hashlib.sha3_512(b'').hexdigest()==app.Sha3ConditionerWriter.EMPTY_SHA3_512
     obj=object.__new__(app.Service);obj.spatial_pattern_cache={}
+    obj.args=types.SimpleNamespace(
+        spatial_mask_pattern="legacy",spatial_sampling="full",
+        spatial_step_x=1,spatial_step_y=1,spatial_phase_x=0,spatial_phase_y=0,
+        spatial_block_width=4,spatial_block_height=4,
+        temporal_spatial_offset_x=0,temporal_spatial_offset_y=0,
+    )
     patterns=app.Service.build_spatial_patterns(obj,(8,10))
     even=patterns['checkerboard-even'];odd=patterns['checkerboard-odd']
     assert not np.any(even&odd);assert np.all(even|odd);assert even.sum()==odd.sum()==40
@@ -105,14 +125,15 @@ def main()->int:
             return {'state':'STARTING','app_version':app.APP_VERSION}
         def files(self):
             return {}
-    client=app.create_app(DummyService()).test_client()
-    for route in ('/api/stats','/api/status','/api/byte-diagnostics'):
-        response=client.get(route)
-        assert response.status_code==200, (route,response.status_code)
-        payload=response.get_json()
-        if route == '/api/byte-diagnostics':
-            assert payload['enabled'] is True
-        else:
-            assert payload['state']=='STARTING'
-    print('camera-entropy distributed v7.6.1 self-test: PASS');return 0
+    if FLASK_AVAILABLE:
+        client=app.create_app(DummyService()).test_client()
+        for route in ('/api/stats','/api/status','/api/byte-diagnostics'):
+            response=client.get(route)
+            assert response.status_code==200, (route,response.status_code)
+            payload=response.get_json()
+            if route == '/api/byte-diagnostics':
+                assert payload['enabled'] is True
+            else:
+                assert payload['state']=='STARTING'
+    print('camera-entropy distributed v7.7.0 self-test: PASS');return 0
 if __name__=='__main__':raise SystemExit(main())

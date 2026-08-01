@@ -49,9 +49,10 @@ def main() -> int:
     assert '"temporal-sha3": "smoke_temporal_sha3.sh"' in control
     assert 'payload.get("web_images", False)' in control
     assert 'payload.get("mask_snapshot_images", False)' in control
-    assert '<option value="temporal-sha3">' in control_html
-    assert 'name="web_images" type="checkbox" style=' in control_html
-    assert 'name="mask_snapshot_images" type="checkbox" style=' in control_html
+    assert '{% for p in profiles %}' in control_html
+    assert 'value="{{ p.id }}"' in control_html
+    assert 'id="web_images" name="web_images" type="checkbox"' in control_html
+    assert 'id="mask_snapshot_images" name="mask_snapshot_images" type="checkbox"' in control_html
     assert "if self.args.mask_snapshot_images:" in worker_source
     assert "if self.args.von_neumann_stage and" in worker_source
 

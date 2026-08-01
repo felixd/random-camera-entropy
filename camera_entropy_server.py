@@ -50,9 +50,16 @@ import numpy as np
 from flask import Flask, Response, abort, render_template_string, send_from_directory
 
 from frame_sources import FrameSource, create_frame_source, redact_url
+from spatial_sampling import (
+    align_previous_frame,
+    build_pattern_set,
+    SpatialSerializer,
+    spatial_xor_lsb,
+)
+# CAMERA_ENTROPY_SPATIAL_V7_7
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.01.camera-entropy-distributed.7.6.1"
+APP_VERSION = "2026.08.02.camera-entropy-distributed.7.7.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -2219,6 +2226,11 @@ class Service:
             self.byte_diagnostics,
         )
         self.spatial_comparison_enabled = bool(args.spatial_comparison)
+        self.spatial_serializer = SpatialSerializer(
+            args.serialization_order,
+            args.serialization_tile_width,
+            args.serialization_tile_height,
+        )
         self.spatial_pattern_cache: dict[str, np.ndarray] = {}
         self.spatial_variant_paths: dict[str, Path] = {"full": self.bin_path}
         self.spatial_variant_writers: dict[str, ContinuousBitWriter] = {"full": self.bit_writer}
@@ -2379,35 +2391,25 @@ class Service:
     def build_spatial_patterns(self, shape: tuple[int, int]) -> dict[str, np.ndarray]:
         if self.spatial_pattern_cache and next(iter(self.spatial_pattern_cache.values())).shape == shape:
             return self.spatial_pattern_cache
-        rows, cols = np.indices(shape, dtype=np.int32)
-        checkerboard_even = ((rows + cols) & 1) == 0
-        self.spatial_pattern_cache = {
-            "full": np.ones(shape, dtype=bool),
-            "checkerboard": checkerboard_even,
-            "checkerboard-even": checkerboard_even,
-            "checkerboard-odd": ~checkerboard_even,
-            "grid2x2": ((rows & 1) == 0) & ((cols & 1) == 0),
-        }
+        self.spatial_pattern_cache = build_pattern_set(shape, self.args)
         return self.spatial_pattern_cache
-
     def spatial_variant_masks(self, effective_active: np.ndarray) -> dict[str, np.ndarray]:
         patterns = self.build_spatial_patterns(effective_active.shape)
         if self.spatial_comparison_enabled:
-            return {
-                name: effective_active & patterns[name]
-                for name in SPATIAL_COMPARISON_VARIANTS
-            }
-        # Keep the internal key "full" for backward-compatible metrics and file
-        # names, while selecting the configured production pattern.
-        selected = canonical_spatial_sampling(self.args.spatial_sampling)
-        return {"full": effective_active & patterns[selected]}
-
+            return {name: effective_active & patterns[name] for name in SPATIAL_COMPARISON_VARIANTS}
+        production = self.production_mask(effective_active)
+        assert production is not None
+        return {"full": production}
     def production_mask(self, active_mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
         if active_mask is None:
             return None
-        selected = canonical_spatial_sampling(self.args.spatial_sampling)
-        return active_mask & self.build_spatial_patterns(active_mask.shape)[selected]
-
+        patterns = self.build_spatial_patterns(active_mask.shape)
+        if self.args.spatial_mask_pattern == "legacy":
+            selected = canonical_spatial_sampling(self.args.spatial_sampling)
+            pattern = patterns[selected]
+        else:
+            pattern = patterns["configured"]
+        return active_mask & pattern
     def update_active_clipping(
         self,
         active_mask: np.ndarray,
@@ -2636,6 +2638,19 @@ class Service:
                 "von_neumann_stage": self.args.von_neumann_stage,
                 "pipeline": "temporal-lsb-mask-health-sha3" if not self.args.von_neumann_stage else "temporal-lsb-mask-health-vn-and-sha3",
                 "spatial_sampling": self.args.spatial_sampling,
+                "spatial_mask_pattern": self.args.spatial_mask_pattern,
+                "spatial_step": [self.args.spatial_step_x, self.args.spatial_step_y],
+                "spatial_phase": [self.args.spatial_phase_x, self.args.spatial_phase_y],
+                "spatial_block": [self.args.spatial_block_width, self.args.spatial_block_height],
+                "temporal_spatial_offset": [
+                    self.args.temporal_spatial_offset_x,
+                    self.args.temporal_spatial_offset_y,
+                ],
+                "serialization_order": self.args.serialization_order,
+                "serialization_tile": [
+                    self.args.serialization_tile_width,
+                    self.args.serialization_tile_height,
+                ],
                 "spatial_comparison": self.spatial_comparison_enabled,
                 "spatial_variants": list(self.spatial_variant_writers),
                 "conditioner": self.conditioner.status(),
@@ -2679,6 +2694,19 @@ class Service:
             "accepted_output_bits": self.bit_writer.accepted_bits,
             "pending_bits": int(self.bit_writer.pending.size),
             "spatial_sampling": self.args.spatial_sampling,
+            "spatial_mask_pattern": self.args.spatial_mask_pattern,
+            "spatial_step": [self.args.spatial_step_x, self.args.spatial_step_y],
+            "spatial_phase": [self.args.spatial_phase_x, self.args.spatial_phase_y],
+            "spatial_block": [self.args.spatial_block_width, self.args.spatial_block_height],
+            "temporal_spatial_offset": [
+                self.args.temporal_spatial_offset_x,
+                self.args.temporal_spatial_offset_y,
+            ],
+            "serialization_order": self.args.serialization_order,
+            "serialization_tile": [
+                self.args.serialization_tile_width,
+                self.args.serialization_tile_height,
+            ],
             "pipeline": "temporal-lsb-mask-health-sha3" if not self.args.von_neumann_stage else "temporal-lsb-mask-health-vn-and-sha3",
             "von_neumann_stage": self.args.von_neumann_stage,
             "web_images": self.args.web_images,
@@ -3023,6 +3051,12 @@ class Service:
                     "production_pixels": int(np.count_nonzero(self.production_mask(self.calibrator.mask)))
                     if self.calibrator and self.calibrator.mask is not None else 0,
                     "spatial_sampling": self.args.spatial_sampling,
+                    "spatial_mask_pattern": self.args.spatial_mask_pattern,
+                    "serialization_order": self.args.serialization_order,
+                    "offset": [
+                        self.args.temporal_spatial_offset_x,
+                        self.args.temporal_spatial_offset_y,
+                    ],
                 },
                 "shadow_mask": shadow_report,
                 "mask_snapshot": {
@@ -3072,6 +3106,18 @@ class Service:
                     "pairing_mode": self.args.pairing_mode,
                     "pair_lag_frames": self.args.pair_lag_frames,
                     "spatial_sampling": self.args.spatial_sampling,
+                    "spatial_mask_pattern": self.args.spatial_mask_pattern,
+                    "spatial_step_x": self.args.spatial_step_x,
+                    "spatial_step_y": self.args.spatial_step_y,
+                    "spatial_phase_x": self.args.spatial_phase_x,
+                    "spatial_phase_y": self.args.spatial_phase_y,
+                    "spatial_block_width": self.args.spatial_block_width,
+                    "spatial_block_height": self.args.spatial_block_height,
+                    "temporal_spatial_offset_x": self.args.temporal_spatial_offset_x,
+                    "temporal_spatial_offset_y": self.args.temporal_spatial_offset_y,
+                    "serialization_order": self.args.serialization_order,
+                    "serialization_tile_width": self.args.serialization_tile_width,
+                    "serialization_tile_height": self.args.serialization_tile_height,
                     "conditioner": self.args.conditioner,
                     "conditioner_input_bits": self.args.conditioner_input_bits,
                     "conditioned_output_bytes": self.args.conditioned_output_bytes,
@@ -3537,10 +3583,16 @@ class Service:
         self.pair_delta_min = min(self.pair_delta_min, pair_delta_seconds)
         self.pair_delta_max = max(self.pair_delta_max, pair_delta_seconds)
 
-        change = ((y & 1) ^ (previous_y & 1)).astype(np.uint8)
+        aligned_previous_y, spatial_valid_mask = align_previous_frame(
+            previous_y,
+            dx=self.args.temporal_spatial_offset_x,
+            dy=self.args.temporal_spatial_offset_y,
+            invalid_fill=0,
+        )
+        change = spatial_xor_lsb(y, aligned_previous_y)
         assert self.calibrator
         was_ready = self.calibrator.ready
-        self.calibrator.update(change, y, previous_y)
+        self.calibrator.update(change, y, aligned_previous_y)
         just_frozen = not was_ready and self.calibrator.ready
         if just_frozen:
             self.initialize_masks()
@@ -3552,7 +3604,7 @@ class Service:
 
         if self.shadow and not just_frozen:
             previous_updates = self.shadow.updates
-            comparison, just_drift_latched = self.shadow.update(change, y, previous_y)
+            comparison, just_drift_latched = self.shadow.update(change, y, aligned_previous_y)
             shadow_mask = self.shadow.mask
             if comparison.bad:
                 self.shadow_bad_seen = True
@@ -3563,7 +3615,7 @@ class Service:
                 self.write_health_event(timestamp, frame_id, "MASK_DRIFT", comparison.details)
                 self.logger.error("Mask drift latched: %s", comparison.details)
 
-        raw_bits = change.reshape(-1)
+        raw_bits = self.spatial_serializer.serialize(change, spatial_valid_mask)
         raw_ones = int(raw_bits.sum())
         masked = np.empty(0, dtype=np.uint8)
         von_neumann = np.empty(0, dtype=np.uint8)
@@ -3593,8 +3645,9 @@ class Service:
             current_ok = (
                 (y > self.args.clip_low)
                 & (y < self.args.clip_high)
-                & (previous_y > self.args.clip_low)
-                & (previous_y < self.args.clip_high)
+                & (aligned_previous_y > self.args.clip_low)
+                & (aligned_previous_y < self.args.clip_high)
+                & spatial_valid_mask
             )
             clip_pair_bad, clip_failure = self.update_active_clipping(
                 active_mask, current_ok, timestamp, frame_id
@@ -3606,10 +3659,13 @@ class Service:
             # retained only as an explicit comparison/compatibility option.
             effective_active = active_mask & current_ok if self.args.dynamic_clip_filter else active_mask
             variant_masks = self.spatial_variant_masks(effective_active)
-            variant_bits = {name: change[mask] for name, mask in variant_masks.items()}
+            variant_bits = {
+                name: self.spatial_serializer.serialize(change, mask)
+                for name, mask in variant_masks.items()
+            }
             masked = variant_bits["full"]
             primary_mask = variant_masks["full"]
-            direct_masked = (y & 1)[primary_mask]
+            direct_masked = self.spatial_serializer.serialize(y & 1, primary_mask)
 
             # Raw temporal validation intentionally includes all post-calibration
             # pairs. Selected validation/correlation excludes pairs rejected by
@@ -3953,6 +4009,9 @@ class Service:
 
     @staticmethod
     def make_overlay(change: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        # Overlay is a two-dimensional diagnostic image.  It must preserve the
+        # original pixel coordinates and therefore intentionally ignores the
+        # output serialization order.
         overlay = np.zeros((change.shape[0], change.shape[1], 3), dtype=np.uint8)
         overlay[:] = (0, 0, 255)
         values = (change[mask] * 255).astype(np.uint8)
@@ -4286,6 +4345,27 @@ def parse_args() -> argparse.Namespace:
         help="Frame distance k. Disjoint mode conceptually uses blocks of 2k frames.",
     )
     parser.add_argument(
+        "--spatial-mask-pattern",
+        choices=("legacy", "full", "checkerboard-even", "checkerboard-odd", "grid", "block"),
+        default="legacy",
+        help="Production spatial selection; legacy preserves --spatial-sampling",
+    )
+    parser.add_argument("--spatial-step-x", type=int, default=1)
+    parser.add_argument("--spatial-step-y", type=int, default=1)
+    parser.add_argument("--spatial-phase-x", type=int, default=0)
+    parser.add_argument("--spatial-phase-y", type=int, default=0)
+    parser.add_argument("--spatial-block-width", type=int, default=4)
+    parser.add_argument("--spatial-block-height", type=int, default=4)
+    parser.add_argument("--temporal-spatial-offset-x", type=int, default=0,
+                        help="Use older Y(x+dx,y+dy); invalid edges are excluded")
+    parser.add_argument("--temporal-spatial-offset-y", type=int, default=0)
+    parser.add_argument("--serialization-order",
+                        choices=("row-major", "serpentine", "tile-interleave"),
+                        default="row-major",
+                        help="Ordering only; this is not entropy conditioning")
+    parser.add_argument("--serialization-tile-width", type=int, default=16)
+    parser.add_argument("--serialization-tile-height", type=int, default=16)
+    parser.add_argument(
         "--spatial-sampling",
         choices=SPATIAL_SAMPLING_CHOICES,
         default="checkerboard-even",
@@ -4590,6 +4670,27 @@ def parse_args() -> argparse.Namespace:
         parser.error("invalid mask p1 range")
     if not (0 < args.mask_transition_min < args.mask_transition_max < 1):
         parser.error("invalid transition range")
+    for name in (
+        "spatial_step_x", "spatial_step_y", "spatial_block_width", "spatial_block_height",
+        "serialization_tile_width", "serialization_tile_height",
+    ):
+        if getattr(args, name) < 1:
+            parser.error(f"{name.replace('_', '-')} must be >= 1")
+    if args.spatial_mask_pattern == "grid":
+        if not 0 <= args.spatial_phase_x < args.spatial_step_x:
+            parser.error("spatial-phase-x must be in [0, spatial-step-x) for grid")
+        if not 0 <= args.spatial_phase_y < args.spatial_step_y:
+            parser.error("spatial-phase-y must be in [0, spatial-step-y) for grid")
+    if args.spatial_mask_pattern == "block":
+        if not 0 <= args.spatial_phase_x < args.spatial_block_width:
+            parser.error("spatial-phase-x must be in [0, spatial-block-width) for block")
+        if not 0 <= args.spatial_phase_y < args.spatial_block_height:
+            parser.error("spatial-phase-y must be in [0, spatial-block-height) for block")
+    if args.spatial_comparison and args.spatial_mask_pattern != "legacy":
+        parser.error(
+            "--spatial-comparison uses the fixed compatibility variants; "
+            "run custom masks as separate profiles with --no-spatial-comparison"
+        )
     if args.pair_lag_frames < 1:
         parser.error("pair-lag-frames must be >= 1")
     if args.pair_lag_frames > 4096:

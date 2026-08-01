@@ -1,5 +1,20 @@
 # Changelog
 
+## 7.7.0 — 2026-08-02
+
+- dodano maski `full`, `checkerboard-even`, `checkerboard-odd`, ogólny `grid` oraz `block` z fazą X/Y;
+- dodano przestrzenny offset temporalnego XOR bez zawijania krawędzi;
+- ujednolicono offset dla XOR, kalibracji, clippingu, shadow maski, RAW validation i produkcji;
+- dodano serializację `row-major`, `serpentine` i `tile-interleave` z cache'owaniem indeksów maski;
+- zachowano zgodność `--spatial-sampling` przez `--spatial-mask-pattern legacy`;
+- dodano dziesięć profili przestrzennych i kampanię zbiorczą z `spatial_campaign_report.html`;
+- dodano wszystkie parametry do CLI, `run_one.sh`, `runner_config.json`, API statusu i raportów końcowych;
+- rozbudowano control server o walidację parametrów, presety i opisy profili;
+- dodano pomoc kontekstową po hover/focus dla wszystkich pól panelu;
+- dodano chronioną przeglądarkę dokumentacji `/docs/` z bezpiecznym renderowaniem Markdown;
+- dodano testy geometrii, braku wrap-around, serializacji, cache, konfiguracji panelu i kampanii;
+- poprawiono błąd prototypowego patcha, w którym statyczny renderer overlay odwoływał się do `self`.
+
 ## 7.6.1 — 2026-08-01
 
 - agent USB otwiera i zwalnia urządzenie V4L2 dla każdej sesji mTLS, zamiast pozostawiać niedrenowany capture pomiędzy rundami;
