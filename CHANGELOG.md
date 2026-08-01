@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased — poprawka pomocy kontekstowej
+## Unreleased — interfejs operatora
 
 - Pomoc po najechaniu i fokusie jest renderowana jako `position: fixed` obok kursora lub aktywnego pola, więc pozostaje w bieżącym viewport.
 - Kliknięcie parametru, etykiety, opcji albo wartości przypina przewijalne okno pomocy w prawym dolnym rogu.
 - Przypięta pomoc nie znika przy odsunięciu kursora; można ją zamknąć przyciskiem `×` albo klawiszem `Escape`.
 - Aktywny parametr i jego etykieta są wizualnie oznaczane jako przypięte.
+- Nagłówek panelu workera pokazuje szczegóły bieżącego etapu zamiast samej nazwy stanu.
+- Podczas warm-up widoczny jest czas pozostały i pasek postępu; podczas kalibracji numer bieżącej pary, cel i procent.
+- Podczas produkcji oraz po zakończeniu nagłówek pokazuje postęp zapisu SHA3 albo głównego pliku wyjściowego.
 
 ## 7.7.0 — 2026-08-02
 

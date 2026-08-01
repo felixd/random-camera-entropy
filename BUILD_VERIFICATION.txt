@@ -31,6 +31,9 @@ Implemented in v7.7.0
   Markdown, text and project instruction/documentation files.
 - Safe Markdown subset renderer: raw HTML is escaped and unsafe URI schemes
   are rejected.
+- Sticky worker header now exposes phase progress from the same `/api/stats`
+  fields as the detailed cards: warm-up remaining time, calibration pair count,
+  and output progress after production starts.
 
 Checks performed
 ----------------
@@ -55,6 +58,11 @@ Checks performed
 - selftest_binary_geometry.py: PASS
 - selftest_transport_lifecycle.py: PASS
 - selftest_tls_reconnect.py: PASS
+- selftest_worker_state_header.py: PASS
+  - warm-up remaining/total duration and progress fraction
+  - calibration pair current/target and percentage
+  - conditioner output progress without falling back to unrelated RAW counters
+  - DOM update of state text, detail, ARIA progress and bar width
 - synthetic spatial campaign summarizer: PASS
 - ZIP CRC and source SHA256SUMS verification
 

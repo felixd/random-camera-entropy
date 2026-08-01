@@ -156,6 +156,8 @@ Katalog główny `/data/` i share read-only wyróżniają właściwy raport dla 
 
 ### Diagnostyka workera na żywo
 
+Nagłówek panelu jest także skrótem bieżącego etapu. Dla `WARMING_UP` pokazuje czas pozostały względem skonfigurowanego warm-upu i pasek postępu. Dla `CALIBRATING` pokazuje numer pary kalibracyjnej względem wszystkich par oraz procent wykonania. W stanie produkcyjnym pokazuje postęp docelowego pliku SHA3 lub głównego wyjścia. Dane są pobierane z tych samych pól `/api/stats`, które zasilają karty poniżej, więc nagłówek i tabela pozostają spójne.
+
 Panel workera pobiera dane bezpośrednio z `/api/byte-diagnostics` i rysuje je lokalnym Plotly bez wpływu na kolejność ani zawartość zapisywanych strumieni. Domyślny widok pokazuje każdy etap na osobnym wykresie liniowym z własną symetryczną skalą odchylenia od `1/256`. Operator może przełączyć widok na linie nakładane ze wspólną skalą; wybór jest zapisywany w `localStorage` przeglądarki. `Direct LSB — aktywna maska` pozostaje w osobnym panelu, aby nie psuć skali etapów po czyszczeniu. Monitorowane są etapy:
 
 ```text
