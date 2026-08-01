@@ -7,7 +7,7 @@ Wersja 7.7.0 dodaje konfigurowalne maski `full`, obie fazy checkerboard, ogóln�
 
 Offset jest stosowany spójnie do temporalnego XOR, kalibracji, clippingu, shadow maski i walidacji. Krawędzie są odrzucane bez zawijania. Indeksy serializacji są cache'owane, dzięki czemu `tile-interleave` nie sortuje całej matrycy przy każdej ramce.
 
-Panel WWW zawiera dziesięć profili przestrzennych i kampanię zbiorczą. Każde pole ma pomoc kontekstową dostępną przez hover i fokus klawiatury. Wszystkie pliki README, Markdown i tekstowe instrukcje są dostępne po zalogowaniu pod `/docs/`.
+Panel WWW zawiera dziesięć profili przestrzennych i kampanię zbiorczą. Każde pole ma pomoc kontekstową: hover lub fokus pokazuje opis bezpośrednio przy aktywnym elemencie, a kliknięcie przypina trwałe, przewijalne okno pomocy w viewport. Wszystkie pliki README, Markdown i tekstowe instrukcje są dostępne po zalogowaniu pod `/docs/`.
 
 Pełny opis parametrów i zasad interpretacji znajduje się w [SPATIAL_SAMPLING.md](SPATIAL_SAMPLING.md).
 

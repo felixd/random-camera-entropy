@@ -49,6 +49,16 @@ def main() -> int:
 
     template = (root / "templates" / "control.html").read_text(encoding="utf-8")
     Environment().parse(template)
+    for marker in (
+        'id="floatingHelp"', 'id="pinnedHelp"', 'id="closePinnedHelp"',
+        'class="floating-help"', 'class="pinned-help"',
+        'function showFloatingHelp(', 'function pinHelp(',
+        "node.addEventListener('click',()=>pinHelp",
+        "position:fixed", "max-height:min(72vh,680px)",
+    ):
+        assert marker in template, marker
+    assert 'id="contextHelp"' not in template
+
     for name in (
         "spatial_mask_pattern", "spatial_step_x", "spatial_step_y",
         "spatial_phase_x", "spatial_phase_y", "spatial_block_width",

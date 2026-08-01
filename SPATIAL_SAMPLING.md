@@ -187,7 +187,7 @@ Po zalogowaniu do control servera dostępne są:
 
 Indeks pokazuje pliki Markdown, tekstowe instrukcje, README, SECURITY, SOURCE_MODEL, CHANGELOG i BUILD_VERIFICATION. Pomijane są katalogi danych, klucze, certyfikaty, repozytoria i środowiska wirtualne. Surowy HTML w dokumentacji jest escapowany i nie jest wykonywany.
 
-Panel zawiera pomoc kontekstową dla każdego pola. Opis pojawia się po najechaniu, ustawieniu fokusu klawiaturą lub zmianie opcji. Opcje profili mają osobne opisy.
+Panel zawiera pomoc kontekstową dla każdego pola. Najechanie lub fokus pokazuje pływający opis przy elemencie i utrzymuje go w granicach bieżącego viewportu. Kliknięcie parametru, etykiety, opcji albo wartości przypina przewijalne okno w prawym dolnym rogu; pozostaje ono widoczne do użycia przycisku `×` albo klawisza `Escape`. Opcje profili mają osobne opisy.
 
 ## Zalecana ocena
 

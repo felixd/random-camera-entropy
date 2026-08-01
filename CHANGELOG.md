@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — poprawka pomocy kontekstowej
+
+- Pomoc po najechaniu i fokusie jest renderowana jako `position: fixed` obok kursora lub aktywnego pola, więc pozostaje w bieżącym viewport.
+- Kliknięcie parametru, etykiety, opcji albo wartości przypina przewijalne okno pomocy w prawym dolnym rogu.
+- Przypięta pomoc nie znika przy odsunięciu kursora; można ją zamknąć przyciskiem `×` albo klawiszem `Escape`.
+- Aktywny parametr i jego etykieta są wizualnie oznaczane jako przypięte.
+
 ## 7.7.0 — 2026-08-02
 
 - dodano maski `full`, `checkerboard-even`, `checkerboard-odd`, ogólny `grid` oraz `block` z fazą X/Y;
