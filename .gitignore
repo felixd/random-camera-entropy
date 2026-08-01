@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+*.log
+
+# Lokalne PKI mTLS — nigdy nie commituj kluczy ani certyfikatów
+pki/*
+!pki/README.md

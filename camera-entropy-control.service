@@ -1,0 +1,34 @@
+[Unit]
+Description=Camera Entropy persistent web control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cameraentropy
+Group=cameraentropy
+WorkingDirectory=/opt/camera-entropy
+Environment=DATA_ROOT=/opt/camera-entropy/data
+Environment=WEB_HOST=127.0.0.1
+Environment=WEB_PORT=8087
+Environment=WORKER_HOST=127.0.0.1
+Environment=WORKER_PORT=18087
+Environment=WEB_AUTH_MODE=app
+Environment=WEB_SECURE_COOKIE=1
+Environment=WEB_TRUST_PROXY=1
+Environment=WEB_SHARE_TOKEN_FILE=/etc/camera-entropy/report-share.token
+ExecStart=/opt/camera-entropy/start_control_server.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/camera-entropy/data /opt/camera-entropy/.venv
+ReadOnlyPaths=/etc/camera-entropy
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

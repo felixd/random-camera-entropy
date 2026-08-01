@@ -1,0 +1,43 @@
+{
+  "sources": [
+    {
+      "id": "camera",
+      "label": "Camera USB przez mTLS — 192.168.1.2",
+      "source_type": "tls-y",
+      "env": {
+        "TLS_HOST": "192.168.1.2",
+        "TLS_PORT": "9443",
+        "TLS_SERVER_NAME": "camera",
+        "WIDTH": "1280",
+        "HEIGHT": "720",
+        "EXPOSURE": "7000"
+      }
+    },
+    {
+      "id": "rtsp-camera-01",
+      "label": "Kamera RTSP 01",
+      "source_type": "rtsp",
+      "env": {
+        "RTSP_URL_FILE": "/etc/camera-entropy/rtsp/camera01.url",
+        "RTSP_TRANSPORT": "tcp",
+        "RTSP_LUMA_MODE": "extract-y",
+        "RTSP_TIMEOUT_SECONDS": "15",
+        "RTSP_STRICT_DIMENSIONS": "0",
+        "WIDTH": "1280",
+        "HEIGHT": "720"
+      }
+    },
+    {
+      "id": "local-usb",
+      "label": "Lokalna kamera USB /dev/video1",
+      "source_type": "v4l2",
+      "env": {
+        "DEVICE": "/dev/video1",
+        "WIDTH": "1280",
+        "HEIGHT": "720",
+        "CAMERA_FPS": "10",
+        "EXPOSURE": "7000"
+      }
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "source_archive": "exposure-benchmark-20260730T093803Z.tar.gz",
+  "important_correction": "This run used the full active mask, not checkerboard.",
+  "command": "/mnt/wymiana/users/felixd/a/camera-entropy-exposure-benchmark-v5/.venv/bin/python /mnt/wymiana/users/felixd/a/camera-entropy-exposure-benchmark-v5/camera_entropy_server.py --device /dev/video1 --host 0.0.0.0 --port 8087 --width 1280 --height 720 --camera-fps 10 --strict-mode --manual-exposure --exposure-value 7000 --thermal-warmup-seconds 1800 --pairing-mode disjoint --pair-lag-frames 4 --calibration-pairs 512 --output-dir /mnt/wymiana/users/felixd/a/camera-entropy-exposure-benchmark-v5/data/exposure-benchmark-20260730T093803Z/exposure_7000 --max-output-bytes 104857600 --validation-output-bytes 10485760 --correlation-distances 1\\,2\\,3\\,4\\,6\\,8\\,12\\,16\\,24\\,32\\,48\\,64 --correlation-every 10 --mask-snapshot-interval-seconds 60 --exit-on-output-limit --exit-on-failure --continue-output-after-health-failure --no-shadow-stop-on-drift --web-images",
+  "run": {
+    "status": "complete",
+    "app_version": "2026.07.30.production-y-spatial-smoke.5.1",
+    "spatial_comparison": false,
+    "spatial_variants": [
+      "full"
+    ],
+    "measured_fps": 1.43200949570986,
+    "pairing": {
+      "mode": "disjoint",
+      "lag_frames": 4,
+      "conceptual_buffer_frames": 8,
+      "buffered_frames": 6,
+      "phase": "SECOND_HALF",
+      "pair_sequence": 4222,
+      "pair_delta_seconds_mean": 2.8451112705896486,
+      "pair_delta_seconds_min": 2.2672388500068337,
+      "pair_delta_seconds_max": 3.364782675052993
+    },
+    "active_pixels": 904839,
+    "health": {
+      "latched": false,
+      "rct_failures": 0,
+      "apt_failures": 0
+    },
+    "shadow": {
+      "active_pixels": 904839,
+      "shadow_pixels": 901829,
+      "overlap_pixels": 901238,
+      "union_pixels": 905430,
+      "active_retention": 0.9960202864819045,
+      "shadow_retention": 0.9993446651194406,
+      "jaccard": 0.9953701556166683,
+      "disagreement_rate": 0.004548611111111111,
+      "updates": 3710,
+      "grace_remaining": 0,
+      "bad_streak": 0,
+      "bad": false,
+      "latched": false,
+      "details": "active_retention=0.996020 (min=0.950000), jaccard=0.995370 (min=0.900000), disagreement=0.004549",
+      "bad_seen": false
+    }
+  },
+  "vn_analysis": {
+    "total_bytes": 104857600,
+    "p1": 0.5003452634811402,
+    "marginal_min_entropy_bits_per_bit": 0.9990041239759828,
+    "byte_shannon_entropy_bits_per_byte": 7.999762386786487,
+    "byte_min_entropy_bits_per_byte": 7.91967211265392,
+    "byte_chi_square": 34564.61450683593,
+    "most_common_byte": "0xFF",
+    "most_common_byte_fraction": 0.004129915237426758,
+    "monte_carlo_pi": 3.1336286595775094,
+    "lag1_phi": 0.006794359363585433,
+    "first_order_markov_entropy_rate": 0.9999663559885803
+  },
+  "chunk_lag1": {
+    "count": 10,
+    "min": 0.006573404400526012,
+    "max": 0.007102307473813585,
+    "mean": 0.006794354302686195,
+    "std_population": 0.00015466663665604787
+  }
+}

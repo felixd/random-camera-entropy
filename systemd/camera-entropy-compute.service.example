@@ -1,0 +1,36 @@
+[Unit]
+Description=Camera Entropy distributed compute node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=camera-entropy
+Group=camera-entropy
+WorkingDirectory=/opt/camera-entropy-distributed
+Environment=SOURCE_TYPE=tls-y
+Environment=TLS_HOST=192.168.1.2
+Environment=TLS_PORT=9443
+Environment=TLS_SERVER_NAME=camera
+Environment=TLS_CA=/opt/camera-entropy-distributed/pki/ca.crt
+Environment=TLS_CERT=/opt/camera-entropy-distributed/pki/client.crt
+Environment=TLS_KEY=/opt/camera-entropy-distributed/pki/client.key
+Environment=DATA_ROOT=/var/lib/camera-entropy/data
+Environment=WARMUP_SECONDS=1800
+Environment=CALIBRATION_PAIRS=512
+Environment=DIAGNOSTIC_VN_BYTES=10485760
+Environment=CONDITIONED_BYTES=104857600
+Environment=VALIDATION_BYTES=10485760
+ExecStart=/opt/camera-entropy-distributed/run_one.sh
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/camera-entropy
+ReadOnlyPaths=/opt/camera-entropy-distributed/pki
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+Camera Entropy Distributed v7.6.1 — build verification
+======================================================
+
+Validated in CAAS on 2026-08-01.
+
+Incident addressed
+------------------
+The third dual-weave qualification run stopped during the 300-second warm-up after the TLS-Y client observed 15 seconds without a complete frame. The USB agent attempted its next send only after the compute process had already terminated, producing a Broken pipe. The run had not entered calibration or production and all output files were still empty.
+
+Implemented fixes
+-----------------
+- USB/V4L2 capture is opened per authenticated mTLS client session and released immediately at session end.
+- Added application-level close / close-ack messages for normal session shutdown.
+- TLS-Y frame timeout default increased from 15 to 60 seconds.
+- Added configurable reconnect attempts and linear backoff.
+- A successful reconnect before production restarts warm-up, pair scheduling and mask calibration.
+- A reconnect after production starts remains fail-closed by default.
+- Added TCP keepalive tuning where supported.
+- Added source connection generation/reconnect counters to API, reports and live dashboard.
+- Dual-weave qualification defaults to 10 reconnect attempts.
+
+Checks performed
+----------------
+- python3 -m py_compile for every top-level Python module
+- bash -n for every top-level shell script
+- node --check for worker dashboard JavaScript
+- node --check for control-panel JavaScript after replacing the Jinja CSRF expression with a test literal
+- selftest_temporal_sha3.py: PASS
+- selftest_transport_lifecycle.py: PASS
+- selftest_tls_reconnect.py: PASS
+  - local mutually authenticated TLS server
+  - deliberate frame timeout
+  - failed first reconnect handshake
+  - successful subsequent reconnect
+  - connection generation increment
+  - clean close acknowledgement
+- selftest_live_byte_diagnostics.py: PASS
+- selftest_binary_geometry.py: PASS
+- patch application to a clean v7.6.0 tree and file-by-file comparison
+- SHA256SUMS verification for the final source tree
+
+Not executed here
+-----------------
+- physical USB/V4L2 camera test
+- deployment test against the user's camera agent host
+- full three-run qualification campaign

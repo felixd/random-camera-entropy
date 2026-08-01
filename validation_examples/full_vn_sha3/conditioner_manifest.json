@@ -1,0 +1,15 @@
+{
+  "algorithm": "SHA3-512",
+  "input": "/mnt/data/exposure-benchmark-20260730T093803Z/exposure_7000/y_temporal_vn.bin",
+  "output": "/mnt/data/current_run_conditioning/full_vn_sha3_512_4to1.bin",
+  "input_bits_per_block": 2048,
+  "output_bits_per_full_block": 512,
+  "compression_ratio": 4.0,
+  "blocks": 409600,
+  "written_bytes": 26214400,
+  "discarded_trailing_input_bytes": 0,
+  "repeated_consecutive_digest_failures": 0,
+  "input_sha256": "08e8f192f115d6a5980109196cf975b588ce46b64d0e6dfe1e8d03f79d22c8e0",
+  "output_sha256": "ad966c77c7939f05dfa6ea3d9af6bbcd198620ea79c6221ae3e9db11b32bf76a",
+  "entropy_claim": "none; output entropy is bounded by the assessed input entropy and conditioner rules"
+}

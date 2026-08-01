@@ -1,0 +1,29 @@
+{
+  "sources": [
+    {
+      "id": "camera",
+      "label": "Camera USB przez mTLS — 192.168.1.2",
+      "source_type": "tls-y",
+      "env": {
+        "TLS_HOST": "192.168.1.2",
+        "TLS_PORT": "9443",
+        "TLS_SERVER_NAME": "camera",
+        "WIDTH": "1280",
+        "HEIGHT": "720",
+        "EXPOSURE": "7000"
+      }
+    },
+    {
+      "id": "local-usb",
+      "label": "Lokalna kamera USB /dev/video1",
+      "source_type": "v4l2",
+      "env": {
+        "DEVICE": "/dev/video1",
+        "WIDTH": "1280",
+        "HEIGHT": "720",
+        "CAMERA_FPS": "10",
+        "EXPOSURE": "7000"
+      }
+    }
+  ]
+}

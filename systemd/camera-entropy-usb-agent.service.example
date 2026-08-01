@@ -1,0 +1,36 @@
+[Unit]
+Description=Camera Entropy USB Y8 mTLS capture agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=camera-entropy
+Group=camera-entropy
+SupplementaryGroups=video
+WorkingDirectory=/opt/camera-entropy-distributed
+Environment=DEVICE=/dev/video1
+Environment=EXPOSURE=7000
+Environment=LISTEN_HOST=0.0.0.0
+Environment=TLS_PORT=9443
+Environment=TLS_CA=/opt/camera-entropy-distributed/pki/ca.crt
+Environment=TLS_CERT=/opt/camera-entropy-distributed/pki/agent.crt
+Environment=TLS_KEY=/opt/camera-entropy-distributed/pki/agent.key
+Environment=SOURCE_ID=camera
+Environment=ALLOWED_CLIENT_CN=camera-compute
+ExecStart=/opt/camera-entropy-distributed/run_usb_agent.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/camera-entropy-distributed/pki
+DevicePolicy=closed
+DeviceAllow=/dev/video1 rw
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
