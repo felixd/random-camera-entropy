@@ -19,6 +19,9 @@ CAMERA_FPS="${CAMERA_FPS:-10}"
 EXPOSURE="${EXPOSURE:-7000}"
 PAIRING_MODE="${PAIRING_MODE:-disjoint}"
 PAIR_LAG_FRAMES="${PAIR_LAG_FRAMES:-4}"
+SAMPLE_MODE="${SAMPLE_MODE:-xor}"
+LSB_BITS="${LSB_BITS:-1}"
+ENTROPY_CREDIT_BITS_PER_PIXEL="${ENTROPY_CREDIT_BITS_PER_PIXEL:-1.0}"
 SPATIAL_SAMPLING="${SPATIAL_SAMPLING:-checkerboard-even}"
 # CAMERA_ENTROPY_SPATIAL_V7_7
 SPATIAL_MASK_PATTERN="${SPATIAL_MASK_PATTERN:-legacy}"
@@ -40,7 +43,6 @@ DUAL_WEAVE_ALIGNMENTS="${DUAL_WEAVE_ALIGNMENTS:-same-group}"
 BINARY_GEOMETRY_REPORT="${BINARY_GEOMETRY_REPORT:-$DUAL_WEAVE_COMPARISON}"
 BINARY_GEOMETRY_MAX_FILES="${BINARY_GEOMETRY_MAX_FILES:-8}"
 BINARY_GEOMETRY_MAX_BYTES="${BINARY_GEOMETRY_MAX_BYTES:-16777216}"
-BINARY_GEOMETRY_SCATTER_POINTS="${BINARY_GEOMETRY_SCATTER_POINTS:-15000}"
 WARMUP_SECONDS="${WARMUP_SECONDS:-1800}"
 CALIBRATION_PAIRS="${CALIBRATION_PAIRS:-512}"
 DIAGNOSTIC_VN_BYTES="${DIAGNOSTIC_VN_BYTES:-10485760}"
@@ -68,6 +70,10 @@ for value in "$DIAGNOSTIC_VN_BYTES" "$CONDITIONED_BYTES" "$VALIDATION_BYTES"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Rozmiary wyjścia muszą być liczbami całkowitymi"
 done
 [[ "$SOURCE_TYPE" =~ ^(v4l2|tls-y|rtsp|dataset-y)$ ]] || fail "SOURCE_TYPE=v4l2, tls-y, rtsp albo dataset-y"
+[[ "$SAMPLE_MODE" =~ ^(xor|direct|delta)$ ]] || fail "SAMPLE_MODE=xor, direct albo delta"
+[[ "$LSB_BITS" =~ ^[0-9]+$ ]] || fail "LSB_BITS musi być liczbą całkowitą"
+(( LSB_BITS >= 1 && LSB_BITS <= 8 )) || fail "LSB_BITS musi być w zakresie 1..8"
+awk -v c="$ENTROPY_CREDIT_BITS_PER_PIXEL" -v b="$LSB_BITS" 'BEGIN{exit !(c>0 && c<=b)}' || fail "ENTROPY_CREDIT_BITS_PER_PIXEL musi być w (0, LSB_BITS]"
 [[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
 [[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"
 for value in "$SPATIAL_STEP_X" "$SPATIAL_STEP_Y" "$SPATIAL_PHASE_X" "$SPATIAL_PHASE_Y" "$SPATIAL_BLOCK_WIDTH" "$SPATIAL_BLOCK_HEIGHT" "$SERIALIZATION_TILE_WIDTH" "$SERIALIZATION_TILE_HEIGHT"; do
@@ -95,7 +101,7 @@ fi
 [[ "$MASK_SNAPSHOT_IMAGES" == 0 || "$MASK_SNAPSHOT_IMAGES" == 1 ]] || fail "MASK_SNAPSHOT_IMAGES=0 albo 1"
 [[ "$ENABLE_VON_NEUMANN" == 0 || "$ENABLE_VON_NEUMANN" == 1 ]] || fail "ENABLE_VON_NEUMANN=0 albo 1"
 [[ "$LIVE_BYTE_DIAGNOSTICS" == 0 || "$LIVE_BYTE_DIAGNOSTICS" == 1 ]] || fail "LIVE_BYTE_DIAGNOSTICS=0 albo 1"
-for value in "$BINARY_GEOMETRY_MAX_FILES" "$BINARY_GEOMETRY_MAX_BYTES" "$BINARY_GEOMETRY_SCATTER_POINTS"; do
+for value in "$BINARY_GEOMETRY_MAX_FILES" "$BINARY_GEOMETRY_MAX_BYTES"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Limity raportu geometrii muszą być liczbami całkowitymi"
 done
 for value in "$LIVE_HEATMAP_INTERVAL_SECONDS" "$LIVE_HEATMAP_MAX_STAGES" "$LIVE_HEATMAP_MIN_BYTES"; do
@@ -103,7 +109,6 @@ for value in "$LIVE_HEATMAP_INTERVAL_SECONDS" "$LIVE_HEATMAP_MAX_STAGES" "$LIVE_
 done
 (( BINARY_GEOMETRY_MAX_FILES >= 1 )) || fail "BINARY_GEOMETRY_MAX_FILES musi być >= 1"
 (( BINARY_GEOMETRY_MAX_BYTES >= 4096 )) || fail "BINARY_GEOMETRY_MAX_BYTES musi być >= 4096"
-(( BINARY_GEOMETRY_SCATTER_POINTS >= 100 )) || fail "BINARY_GEOMETRY_SCATTER_POINTS musi być >= 100"
 awk -v v="$LIVE_HEATMAP_INTERVAL_SECONDS" 'BEGIN{exit !(v>=0)}' || fail "LIVE_HEATMAP_INTERVAL_SECONDS musi być >= 0"
 [[ "$LIVE_HEATMAP_MAX_STAGES" =~ ^[0-9]+$ ]] || fail "LIVE_HEATMAP_MAX_STAGES musi być całkowite"
 [[ "$LIVE_HEATMAP_MIN_BYTES" =~ ^[0-9]+$ ]] || fail "LIVE_HEATMAP_MIN_BYTES musi być całkowite"
@@ -278,6 +283,8 @@ command=(
     "${source_args[@]}" --host "$HOST" --port "$PORT"
     --thermal-warmup-seconds "$WARMUP_SECONDS"
     --pairing-mode "$PAIRING_MODE" --pair-lag-frames "$PAIR_LAG_FRAMES"
+    --sample-mode "$SAMPLE_MODE" --lsb-bits "$LSB_BITS"
+    --entropy-credit-bits-per-pixel "$ENTROPY_CREDIT_BITS_PER_PIXEL"
     --spatial-sampling "$SPATIAL_SAMPLING" "$comparison_flag"
     --spatial-mask-pattern "$SPATIAL_MASK_PATTERN"
     --spatial-step-x "$SPATIAL_STEP_X" --spatial-step-y "$SPATIAL_STEP_Y"
@@ -320,6 +327,11 @@ cat > "$RUN_DIR/runner_config.json" <<JSON
   "exposure": $EXPOSURE,
   "pairing_mode": "$PAIRING_MODE",
   "pair_lag_frames": $PAIR_LAG_FRAMES,
+  "sample_mode": "$SAMPLE_MODE",
+  "lsb_bits": $LSB_BITS,
+  "bit_order": "pixel-major-lsb-first",
+  "entropy_credit_bits_per_pixel": $ENTROPY_CREDIT_BITS_PER_PIXEL,
+  "mask_calibration_source": "temporal-xor-lsb0",
   "spatial_sampling": "$SPATIAL_SAMPLING",
   "spatial_mask_pattern": "$SPATIAL_MASK_PATTERN",
   "spatial_step_x": $SPATIAL_STEP_X,
@@ -340,7 +352,6 @@ cat > "$RUN_DIR/runner_config.json" <<JSON
   "binary_geometry_report": $BINARY_GEOMETRY_REPORT,
   "binary_geometry_max_files": $BINARY_GEOMETRY_MAX_FILES,
   "binary_geometry_max_bytes": $BINARY_GEOMETRY_MAX_BYTES,
-  "binary_geometry_scatter_points": $BINARY_GEOMETRY_SCATTER_POINTS,
   "warmup_seconds": $WARMUP_SECONDS,
   "calibration_pairs": $CALIBRATION_PAIRS,
   "diagnostic_vn_bytes": $DIAGNOSTIC_VN_BYTES,
@@ -361,7 +372,7 @@ JSON
 
 log "Start: $RUN_DIR"
 log "Źródło: $SOURCE_TYPE — $source_label"
-log "Nastaw: exposure=$EXPOSURE, $PAIRING_MODE/k=$PAIR_LAG_FRAMES, spatial=$SPATIAL_SAMPLING, dual-weave=$DUAL_WEAVE_COMPARISON (orders=$DUAL_WEAVE_ORDERS; alignments=$DUAL_WEAVE_ALIGNMENTS)"
+log "Nastaw: exposure=$EXPOSURE, $PAIRING_MODE/k=$PAIR_LAG_FRAMES, sample=$SAMPLE_MODE/${LSB_BITS}LSB, credit=$ENTROPY_CREDIT_BITS_PER_PIXEL bit/pixel, spatial=$SPATIAL_SAMPLING, dual-weave=$DUAL_WEAVE_COMPARISON (orders=$DUAL_WEAVE_ORDERS; alignments=$DUAL_WEAVE_ALIGNMENTS)"
 log "Cele: VN=$DIAGNOSTIC_VN_BYTES B, SHA3=$CONDITIONED_BYTES B, validation=$VALIDATION_BYTES B"
 "${command[@]}" > >(tee "$RUN_DIR/console.log") 2>&1 &
 pid=$!
@@ -399,6 +410,7 @@ log "Analiza plików"
 analyze_one "$RUN_DIR/camera_entropy_sha3_512.bin" "$RUN_DIR/analysis_conditioned"
 analyze_one "$RUN_DIR/y_temporal_vn.bin" "$RUN_DIR/analysis_vn"
 analyze_one "$RUN_DIR/y_temporal_masked_validation.bin" "$RUN_DIR/analysis_selected_raw"
+"$VENV_PYTHON" "$SCRIPT_DIR/analyze_lsb_bitplanes.py" "$RUN_DIR"     --lsb-bits "$LSB_BITS" --max-bytes "$BINARY_GEOMETRY_MAX_BYTES"
 analyze_one "$RUN_DIR/y_temporal_raw_validation.bin" "$RUN_DIR/analysis_temporal_raw"
 analyze_one "$RUN_DIR/y_direct_lsb_common_mask_validation.bin" "$RUN_DIR/analysis_direct_lsb"
 if [[ "$SPATIAL_COMPARISON" == 1 ]]; then
@@ -423,11 +435,10 @@ if [[ "$DUAL_WEAVE_COMPARISON" == 1 ]]; then
     "$VENV_PYTHON" "$SCRIPT_DIR/analyze_dual_weave.py" "$RUN_DIR"
 fi
 if [[ "$BINARY_GEOMETRY_REPORT" == 1 ]]; then
-    log "Analiza geometrii 2D/3D plików BIN"
+    log "Analiza geometrii 2D plików BIN"
     "$VENV_PYTHON" "$SCRIPT_DIR/analyze_binary_geometry.py" "$RUN_DIR" \
         --max-files "$BINARY_GEOMETRY_MAX_FILES" \
-        --max-bytes "$BINARY_GEOMETRY_MAX_BYTES" \
-        --max-scatter-points "$BINARY_GEOMETRY_SCATTER_POINTS"
+        --max-bytes "$BINARY_GEOMETRY_MAX_BYTES"
 fi
 write_sha256s "$RUN_DIR"
 
@@ -440,6 +451,10 @@ if (run/"dual_weave_report.json").exists():
  result["dual_weave_report"]="dual_weave_report.json"
 if (run/"binary_geometry_summary.json").exists():
  result["binary_geometry_report"]="binary_geometry_report.html"
+if (run/"lsb_bitplane_summary.json").exists():
+ bitplanes=json.loads((run/"lsb_bitplane_summary.json").read_text())
+ result["lsb_bitplane_report"]="lsb_bitplane_report.html"
+ result["lsb_bitplane_summary"]={k:bitplanes.get(k) for k in ("lsb_bits","symbol_min_entropy_bits_per_symbol","symbol_min_entropy_bits_per_input_bit","max_abs_cross_plane_phi","max_cross_plane_mutual_information_bits")}
 for name in ("conditioned","vn","selected_raw","temporal_raw","direct_lsb"):
  p=run/f"analysis_{name}"/"summary.json"
  if p.exists():

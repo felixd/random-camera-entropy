@@ -514,7 +514,7 @@ def main() -> int:
             '<code>C0_g || C1_(g+2)</code>. Nie jest to przeplatanie pojedynczych bitów.</p>'
             '<img class="pipeline-diagram" src="dual_weave_stagger2_checkerboard.svg" '
             'alt="Dual weave row-major stagger-2 checkerboard">'
-            '<p><a href="binary_geometry_report.html">Geometria 2D/3D plików BIN</a></p></section>'
+            '<p><a href="binary_geometry_report.html">Geometria 2D plików BIN</a></p></section>'
         )
     body = (
         f'<div class="callout {"good" if diagnostic_best else "bad"}"><strong>Wniosek:</strong> {esc(verdict)}</div>'
@@ -538,7 +538,7 @@ def main() -> int:
         '<a href="dual_weave_report.json">JSON</a>'
         '<a href="dual_weave_comparison.csv">Porównanie CSV</a>'
         '<a href="dual_weave_positional_correlation.csv">Pozycje CSV</a>'
-        + ('<a href="binary_geometry_report.html">Geometria 2D/3D</a>' if stagger_diagram else '')
+        + ('<a href="binary_geometry_report.html">Geometria 2D</a>' if stagger_diagram else '')
     )
     doc = html_page(
         title="Dual weave: same-group kontra stagger",

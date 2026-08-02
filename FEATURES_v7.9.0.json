@@ -1,0 +1,49 @@
+{
+  "schema": "camera-entropy-feature-manifest-v1",
+  "version": "2026.08.02.camera-entropy-distributed.7.9.0",
+  "sample_modes": [
+    "xor",
+    "direct",
+    "delta"
+  ],
+  "lsb_bits": {
+    "minimum": 1,
+    "maximum": 8,
+    "bit_order": "pixel-major-lsb-first"
+  },
+  "mask_calibration_source": "temporal-xor-lsb0",
+  "profiles": [
+    "lsb-campaign",
+    "global-all"
+  ],
+  "binary_geometry": {
+    "dimensions": 2,
+    "volumetric_plots": false
+  },
+  "lsb_bitplane_analysis": {
+    "marginals": true,
+    "lag1": true,
+    "cross_plane_phi": true,
+    "cross_plane_mutual_information": true
+  },
+  "lsb_campaign_profiles": 24,
+  "global_campaign_steps": 22,
+  "lsb_campaign_report": {
+    "schema": "camera-entropy-lsb-campaign-v2",
+    "throughput_metrics": [
+      "raw_input_bps_10s",
+      "masked_input_bps_10s",
+      "pixel_symbols_per_second",
+      "credited_entropy_bps",
+      "empirical_symbol_hmin_bps",
+      "conditioned_output_bps",
+      "time_to_target_seconds"
+    ]
+  },
+  "selftests": {
+    "profile_consistency": true,
+    "cli_validation": true,
+    "campaign_throughput_summary": true,
+    "binary_geometry_2d_only": true
+  }
+}

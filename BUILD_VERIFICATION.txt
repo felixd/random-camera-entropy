@@ -1,27 +1,36 @@
-Camera Entropy Distributed v7.8.4 — build verification
+Camera Entropy Distributed v7.9.0 — build verification
 
 Source basis
-- Built directly from the complete archive supplied by the user on 2026-08-02.
-- No patch installer and no backup copies are included.
+- Built directly from random-camera-entropy-dev(1).zip supplied by the user on 2026-08-02.
+- Detected base version: 2026.08.02.camera-entropy-distributed.7.8.4.
+- Source archive SHA-256: 54c7635051453ff052b456a54d753556d851d0f471242cd2cf9d8fe6a4c6ef1f.
+- The release archive contains complete patched sources, not a patch installer.
+- Temporary .before-v7.9.0 backup files are excluded from the release archive.
 
-Implemented and verified statically
-- Continuous USB-agent capture and source warm-up metadata.
-- Y8 and packed-LSB frame recorder with 300 GB default limit.
-- Safe concurrent dataset reading based on payload-first/index-row commit ordering.
-- Relative default DATASET_DIR=data/frame-buffer-latest in both source configurations.
-- Dataset preflight in the control server and in run_one.sh.
-- Geometry is loaded from manifest.json rather than trusted from the source preset.
-- Stopped datasets remain readable.
-- start_new_session PID/PGID race removed; API start errors remain JSON.
-- Raw frame-buffer directories are excluded from the reports list.
+Implemented
+- SAMPLE_MODE=xor|direct|delta.
+- LSB_BITS=1..8 with pixel-major-lsb-first serialization.
+- Frozen-mask calibration remains temporal XOR of LSB0.
+- Separate ENTROPY_CREDIT_BITS_PER_PIXEL and SHA3-512 minimum-input guard.
+- Per-run LSB bit-plane report: bias, Shannon/Hmin, lag-1, symbol Hmin and cross-plane phi/MI.
+- Exhaustive lsb-campaign: 3 sample modes x 8 widths = 24 runs.
+- global-all profile: all 22 earlier public web execution paths, including aggregate campaigns and lsb-campaign.
+- LSB campaign report includes raw/masked input throughput, pixel symbols/s, credited and empirical diagnostic entropy throughput, SHA3 throughput and time-to-target.
+- Binary geometry reports are 2D-only; no surface, triplet scatter or max-scatter controls remain in active report generators.
+- Web control fields and validation for sample mode, LSB width and entropy credit.
+- All package components report version 7.9.0.
 
 Checks run in the build environment
-- Python syntax compilation for all project Python files.
-- Bash syntax validation for all project shell scripts.
-- Existing core selftest.py.
-- New Y8/LSB dataset round-trip test.
-- Static and isolated JobManager regression for an immediately exiting child process.
+- Python syntax compilation for every top-level project Python file.
+- Bash syntax validation for every top-level project shell script.
+- All selftest*.py tests, including new CLI, campaign/profile consistency and LSB throughput-summary tests.
+- Static check that active report generators contain no 3D artifact names or removed CLI controls.
+- Global-profile consistency check: exactly ALLOWED_PROFILES minus global-all, 22 steps.
+- LSB campaign consistency check: xor/direct/delta and widths 1..8, 24 combinations.
+- Synthetic generation of 2D binary geometry reports and LSB bit-plane/campaign reports.
+- Final ZIP integrity test with unzip -t.
 
 Limitations of build environment
-- No physical V4L2 camera, mTLS endpoint, or production data volume was available.
-- Flask was not preinstalled and package download was unavailable; control-server behavior was tested with an isolated import shim plus source-level regression checks.
+- No physical V4L2 camera, RTSP stream, mTLS Y8 agent or production-size dataset was available.
+- The complete 24-run LSB campaign and 22-step GLOBAL campaign were not executed against camera hardware.
+- Flask/Werkzeug were not installed in the build container; CLI and JobManager logic were tested with import-only shims, while Python syntax and all non-WSGI self-tests ran normally.

@@ -57,9 +57,16 @@ from spatial_sampling import (
     spatial_xor_lsb,
 )
 # CAMERA_ENTROPY_SPATIAL_V7_7
+from entropy_bitplanes import (
+    BIT_ORDER,
+    SAMPLE_MODES,
+    minimum_conditioner_input_bits,
+    sample_label,
+    serialize_samples,
+)
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.02.camera-entropy-distributed.7.8.4"
+APP_VERSION = "2026.08.02.camera-entropy-distributed.7.9.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -142,6 +149,11 @@ SPATIAL_COMPARISON_VARIANTS = (
 
 def canonical_spatial_sampling(name: str) -> str:
     return "checkerboard-even" if name == "checkerboard" else name
+
+def entropy_pipeline_name(args: argparse.Namespace) -> str:
+    mode = {"xor": "temporal-xor", "direct": "direct-y", "delta": "temporal-delta"}[args.sample_mode]
+    tail = "mask-health-sha3" if not args.von_neumann_stage else "mask-health-vn-and-sha3"
+    return f"{mode}-lsb{args.lsb_bits}-{tail}"
 
 
 def utc_timestamp() -> str:
@@ -2636,7 +2648,13 @@ class Service:
                 "mask_snapshot_images": self.args.mask_snapshot_images,
                 "web_images": self.args.web_images,
                 "von_neumann_stage": self.args.von_neumann_stage,
-                "pipeline": "temporal-lsb-mask-health-sha3" if not self.args.von_neumann_stage else "temporal-lsb-mask-health-vn-and-sha3",
+                "pipeline": entropy_pipeline_name(self.args),
+                "sample_mode": self.args.sample_mode,
+                "lsb_bits": self.args.lsb_bits,
+                "bit_order": BIT_ORDER,
+                "entropy_credit_bits_per_pixel": self.args.entropy_credit_bits_per_pixel,
+                "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
+                "mask_calibration_source": "temporal-xor-lsb0",
                 "spatial_sampling": self.args.spatial_sampling,
                 "spatial_mask_pattern": self.args.spatial_mask_pattern,
                 "spatial_step": [self.args.spatial_step_x, self.args.spatial_step_y],
@@ -2707,7 +2725,13 @@ class Service:
                 self.args.serialization_tile_width,
                 self.args.serialization_tile_height,
             ],
-            "pipeline": "temporal-lsb-mask-health-sha3" if not self.args.von_neumann_stage else "temporal-lsb-mask-health-vn-and-sha3",
+            "pipeline": entropy_pipeline_name(self.args),
+            "sample_mode": self.args.sample_mode,
+            "lsb_bits": self.args.lsb_bits,
+            "bit_order": BIT_ORDER,
+            "entropy_credit_bits_per_pixel": self.args.entropy_credit_bits_per_pixel,
+            "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
+            "mask_calibration_source": "temporal-xor-lsb0",
             "von_neumann_stage": self.args.von_neumann_stage,
             "web_images": self.args.web_images,
             "mask_snapshot_images": self.args.mask_snapshot_images,
@@ -2791,7 +2815,13 @@ class Service:
             "written_output_bytes": self.bit_writer.written_bytes,
             "accepted_output_bits": self.bit_writer.accepted_bits,
             "spatial_sampling": self.args.spatial_sampling,
-            "pipeline": "temporal-lsb-mask-health-sha3" if not self.args.von_neumann_stage else "temporal-lsb-mask-health-vn-and-sha3",
+            "pipeline": entropy_pipeline_name(self.args),
+            "sample_mode": self.args.sample_mode,
+            "lsb_bits": self.args.lsb_bits,
+            "bit_order": BIT_ORDER,
+            "entropy_credit_bits_per_pixel": self.args.entropy_credit_bits_per_pixel,
+            "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
+            "mask_calibration_source": "temporal-xor-lsb0",
             "von_neumann_stage": self.args.von_neumann_stage,
             "web_images": self.args.web_images,
             "mask_snapshot_images": self.args.mask_snapshot_images,
@@ -3628,7 +3658,14 @@ class Service:
                 self.write_health_event(timestamp, frame_id, "MASK_DRIFT", comparison.details)
                 self.logger.error("Mask drift latched: %s", comparison.details)
 
-        raw_bits = self.spatial_serializer.serialize(change, spatial_valid_mask)
+        raw_bits = serialize_samples(
+            y,
+            aligned_previous_y,
+            self.spatial_serializer,
+            spatial_valid_mask,
+            self.args.sample_mode,
+            self.args.lsb_bits,
+        )
         raw_ones = int(raw_bits.sum())
         masked = np.empty(0, dtype=np.uint8)
         von_neumann = np.empty(0, dtype=np.uint8)
@@ -3673,7 +3710,14 @@ class Service:
             effective_active = active_mask & current_ok if self.args.dynamic_clip_filter else active_mask
             variant_masks = self.spatial_variant_masks(effective_active)
             variant_bits = {
-                name: self.spatial_serializer.serialize(change, mask)
+                name: serialize_samples(
+                    y,
+                    aligned_previous_y,
+                    self.spatial_serializer,
+                    mask,
+                    self.args.sample_mode,
+                    self.args.lsb_bits,
+                )
                 for name, mask in variant_masks.items()
             }
             masked = variant_bits["full"]
@@ -3685,7 +3729,7 @@ class Service:
             # the active-clipping health monitor, matching production output.
             self.raw_temporal_validation_writer.write_bits(raw_bits)
             self.byte_diagnostics.observe_bits(
-                "temporal_raw", "Temporal XOR — pełna mapa", 10, raw_bits, "main"
+                "temporal_raw", sample_label(self.args.sample_mode, self.args.lsb_bits) + " — pełna mapa", 10, raw_bits, "main"
             )
             if not clip_pair_bad and not self.clip_latched:
                 self.direct_validation_writer.write_bits(direct_masked)
@@ -3693,7 +3737,7 @@ class Service:
                     "direct_lsb", "Direct LSB — aktywna maska", 0, direct_masked, "main"
                 )
                 self.byte_diagnostics.observe_bits(
-                    "temporal_masked", "Temporal XOR — aktywna maska", 20, masked, "main"
+                    "temporal_masked", sample_label(self.args.sample_mode, self.args.lsb_bits) + " — aktywna maska", 20, masked, "main"
                 )
                 for variant, bits_for_variant in variant_bits.items():
                     self.spatial_variant_validation_writers[variant].write_bits(bits_for_variant)
@@ -4377,6 +4421,27 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--sample-mode",
+        choices=SAMPLE_MODES,
+        default="xor",
+        help="Sample symbols behind the frozen mask: temporal XOR, direct Y, or modulo-256 temporal delta",
+    )
+    parser.add_argument(
+        "--lsb-bits",
+        type=int,
+        default=1,
+        help="Number of least-significant Y/sample bits to serialize, 1..8",
+    )
+    parser.add_argument(
+        "--entropy-credit-bits-per-pixel",
+        type=float,
+        default=1.0,
+        help=(
+            "Conservative entropy budget per selected pixel, independent of captured LSB width. "
+            "This is an external assessment input, not a value established by statistical tests."
+        ),
+    )
+    parser.add_argument(
         "--pairing-mode",
         choices=("disjoint", "sliding"),
         default="disjoint",
@@ -4766,6 +4831,25 @@ def parse_args() -> argparse.Namespace:
             "--spatial-comparison uses the fixed compatibility variants; "
             "run custom masks as separate profiles with --no-spatial-comparison"
         )
+    if not 1 <= args.lsb_bits <= 8:
+        parser.error("lsb-bits must be in 1..8")
+    try:
+        args.minimum_conditioner_input_bits = minimum_conditioner_input_bits(
+            args.lsb_bits, args.entropy_credit_bits_per_pixel
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    if (
+        args.conditioner == "sha3-512"
+        and args.conditioner_input_bits < args.minimum_conditioner_input_bits
+    ):
+        parser.error(
+            "conditioner-input-bits is below the entropy-credit budget: "
+            f"need at least {args.minimum_conditioner_input_bits} bits for "
+            f"lsb-bits={args.lsb_bits}, credit={args.entropy_credit_bits_per_pixel:g}"
+        )
+    if args.dual_weave_comparison and (args.sample_mode != "xor" or args.lsb_bits != 1):
+        parser.error("dual-weave comparison currently requires sample-mode=xor and lsb-bits=1")
     if args.pair_lag_frames < 1:
         parser.error("pair-lag-frames must be >= 1")
     if args.pair_lag_frames > 4096:

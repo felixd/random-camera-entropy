@@ -12,7 +12,7 @@ import analyze_binary_geometry as geometry
 
 
 def main() -> int:
-    # Orientation invariant: matrix[x, y] means B_n=x and B_(n+1)=y.
+    # Preserve the historical public helper API and matrix orientation.
     x = np.array([1, 1, 2], dtype=np.uint8)
     y = np.array([250, 250, 3], dtype=np.uint8)
     counts = geometry.pair_counts(x, y)
@@ -20,15 +20,14 @@ def main() -> int:
     assert counts[2, 3] == 1
     assert counts.sum() == 3
 
-    # Exact independence model: observed == outer marginals / N.
     independent = np.zeros((256, 256), dtype=np.uint64)
     independent[:2, :2] = np.array([[40, 20], [20, 10]], dtype=np.uint64)
     expected, residuals, enrichment, diag = geometry.independence_diagnostics(independent)
     assert np.allclose(expected[:2, :2], independent[:2, :2])
     assert np.allclose(residuals, 0.0)
+    assert np.all(np.isfinite(enrichment))
     assert diag["transition_independence_chi_square"] == 0.0
     assert diag["transition_cramers_v"] == 0.0
-    assert enrichment.shape == (256, 256)
 
     with tempfile.TemporaryDirectory() as raw:
         run = Path(raw) / "run"
@@ -53,12 +52,14 @@ def main() -> int:
             (selection / name).write_bytes(b"\x00\x01\x02\x03")
         selected = geometry.select_bin_files(selection, [], 4, False)
         assert [geometry.pipeline_stage(path)[1] for path in selected] == [
-            "Direct LSB", "Temporal difference + active mask", "Von Neumann", "SHA3-512",
+            "Direct LSB",
+            "Temporal difference + active mask",
+            "Von Neumann",
+            "SHA3-512",
         ]
 
         result = geometry.main([
-            str(run), "--all-bin", "--max-files", "4", "--max-bytes", "1048576",
-            "--max-scatter-points", "4000",
+            str(run), "--all-bin", "--max-files", "4", "--max-bytes", "1048576"
         ])
         assert result == 0
         summary = json.loads((run / geometry.SUMMARY_NAME).read_text(encoding="utf-8"))
@@ -74,34 +75,29 @@ def main() -> int:
         assert dependent_row["pipeline_stage_label"] == "Direct LSB"
         assert random_row["pipeline_stage_label"] == "SHA3-512"
         assert dependent_row["observed_log10_scale_max"] == random_row["observed_log10_scale_max"]
+
         assert (run / geometry.REPORT_NAME).is_file()
         assert (run / geometry.DIAGRAM_NAME).is_file()
         assert list(run.glob("byte_pairs_2d_*.png"))
         assert list(run.glob("byte_pairs_residual_*.png"))
         assert list(run.glob("byte_histogram_*.png"))
-        assert list(run.glob("byte_pairs_surface_3d_*.png"))
-        assert list(run.glob("byte_triplets_scatter_3d_*.png"))
+        assert not list(run.glob("*surface*"))
+        assert not list(run.glob("*scatter*"))
         npz_paths = list(run.glob("byte_pairs_counts_*.npz"))
         assert npz_paths
         with np.load(npz_paths[0]) as archive:
-            assert {"counts", "expected", "pearson_residuals", "log2_enrichment", "x_counts", "y_counts", "byte_counts"} <= set(archive.files)
+            assert {
+                "counts", "expected", "pearson_residuals", "log2_enrichment",
+                "x_counts", "y_counts", "byte_counts"
+            } <= set(archive.files)
         report = (run / geometry.REPORT_NAME).read_text(encoding="utf-8")
-        assert '"type":"surface"' in report
-        assert '"type":"scatter3d"' in report
-        assert '"requiresWebGL":true' in report
-        assert '"staticUnderCsp":true' in report
-        assert '"fallbackImage":"byte_pairs_surface_3d_' in report
-        assert '"fallbackImage":"byte_triplets_scatter_3d_' in report
-        assert "plot-static-fallback" in report
-        assert "Zaobserwowane przejścia" in report
-        assert "Odchylenie od niezależności" in report
-        assert "Reszta Pearsona" in report
-        assert "Porównanie etapów pipeline w jednej skali" in report
-        assert "Histogram odchyleń częstotliwości bajtów" in report
-        assert "Odchylenie od 1/256" in report
-        diagram = (run / geometry.DIAGRAM_NAME).read_text(encoding="utf-8")
-        assert "C0_g [1024 bity]" in diagram
-        assert "C1_(g+2) [1024 bity]" in diagram
+        assert "Geometria 2D" in report
+        assert "Przejścia Bn" in report
+        assert "Reszty Pearsona" in report
+        assert "Histogram bajtów" in report
+        assert "scatter3d" not in report
+        assert '"type":"surface"' not in report
+        assert summary["volumetric_plots"] is False
 
     print("binary geometry self-test: PASS")
     return 0

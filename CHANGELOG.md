@@ -1,3 +1,14 @@
+## 7.9.0 — 2026-08-02
+
+- dodano `--lsb-bits 1..8` oraz `--sample-mode xor|direct|delta`;
+- kalibracja maski nadal używa czasowego XOR bitu `LSB0`, aby profile pozostały porównywalne;
+- dodano oddzielny budżet `entropy credit` i kontrolę minimalnego wejścia SHA3; liczba pobieranych bitów nie jest traktowana jako deklaracja entropii;
+- dodano pełny profil `lsb-campaign`: XOR, bezpośrednie Y i temporalna delta dla każdej szerokości 1..8 LSB, łącznie 24 przebiegi;
+- dodano diagnostykę każdego bitu, zależności lag-1 oraz macierze phi/MI pomiędzy bitami tego samego piksela;
+- raport kampanii LSB porównuje również przepustowość wejścia, czas osiągnięcia celu i przepustowość SHA3;
+- dodano `global-all`, uruchamiający wszystkie wcześniejsze profile WWW oraz pełną kampanię LSB;
+- raporty geometrii binarnej są wyłącznie 2D; usunięto powierzchnie wolumetryczne i chmury trójek.
+
 # Changelog
 
 ## 7.8.4 — 2026-08-02

@@ -1,7 +1,7 @@
-# Camera Entropy Distributed v7.8.4
+# Camera Entropy Distributed v7.9.0
 
 
-## Korelacja przestrzenna, maski i dokumentacja v7.8.4
+## Korelacja przestrzenna, maski i dokumentacja v7.9.0
 
 Wersja 7.7.0 dodaje konfigurowalne maski `full`, obie fazy checkerboard, ogólną siatkę `grid`, wybór jednej pozycji z bloku `block`, przestrzenny offset temporalnego XOR oraz kolejności `row-major`, `serpentine` i `tile-interleave`.
 
@@ -132,7 +132,7 @@ Generowanie klatki, kanału Y, mapy LSB i masek w panelu workera jest domyślnie
 
 Wyłączenie PNG masek nie wyłącza metryk dryftu, CSV, JSON ani wykresu Plotly. Dzięki temu kontrola retencji/Jaccarda nadal działa bez kosztu kodowania i przesyłania obrazów.
 
-## Raporty i diagnostyka live v7.8.4
+## Raporty i diagnostyka live v7.9.0
 
 Raporty są teraz projektowane jako krótki panel decyzyjny, a nie surowy zrzut wszystkich pól. Najważniejsze metryki i werdykt znajdują się na górze, a pełne tabele pozostają w sekcjach rozwijanych.
 
@@ -148,7 +148,7 @@ Najważniejsze raporty:
 
 - `run_report.html` — porównanie etapów RAW → VN → SHA3, health, clipping i stabilność maski;
 - `dual_weave_report.html` — przepustowość, korelacja pozycyjna C0↔C1, lagi granic bloków i porównanie `same-group` / `stagger-1` / `stagger-2`;
-- `binary_geometry_report.html` — heatmapa liczności przejść, mapa reszt Pearsona względem niezależności, histogramy marginalne, H(X), H(Y), H(X,Y), H(Y|X), MI, Cramér V oraz interaktywna bryła i chmura 3D;
+- `binary_geometry_report.html` — heatmapa liczności przejść, mapa reszt Pearsona względem niezależności, histogramy marginalne, H(X), H(Y), H(X,Y), H(Y|X), MI, Cramér V oraz statyczne heatmapy 2D bez brył i chmur 3D;
 - `dual_weave_campaign_report.html` — powtarzalność wariantów w kampanii i diagnostyczny ranking;
 - `qualification_report.html` — powtarzalność przebiegów, finalne SHA3, maska i pozostała korelacja przestrzenna.
 
@@ -463,7 +463,7 @@ lub z terminala:
 SOURCE_TYPE=tls-y ./smoke_dual_weave_stagger2.sh
 ```
 
-Profil uruchamia tylko `row-major / stagger-2`, zachowuje checkerboard EVEN/ODD i automatycznie generuje raport geometrii 2D/3D.
+Profil uruchamia tylko `row-major / stagger-2`, zachowuje checkerboard EVEN/ODD i automatycznie generuje raport geometrii 2D.
 
 ### Smoke porównawczy
 
@@ -525,7 +525,7 @@ binary_geometry_metrics.csv
 dual_weave_stagger2_checkerboard.svg
 ```
 
-### Geometria 2D/3D plików BIN
+### Geometria 2D plików BIN
 
 `run_one.sh` domyślnie uruchamia analizę geometrii dla przebiegów dual weave. Analiza tworzy macierz `256 × 256` o stałej orientacji:
 
@@ -575,7 +575,7 @@ Direct LSB → temporal difference + active mask → Von Neumann → SHA3-512
 
 W sekcji porównawczej histogramy używają wspólnej skali częstotliwości, wszystkie heatmapy liczności wspólnego maksimum `log10(1+count)`, a mapy reszt wspólnej skali `-8…+8`. Dzięki temu nie można przypadkowo ukryć różnic przez automatyczne przeskalowanie każdego obrazu osobno. Każdy histogram ma również interaktywny odpowiednik Plotly w raporcie.
 
-Raport zawiera powierzchnię 3D obserwowanej gęstości oraz chmurę kolejnych trójek `(B_n, B_(n+1), B_(n+2))`. Przy obecnej restrykcyjnej CSP i pełnym pakiecie Plotly widoki WebGL są celowo zastępowane automatycznie wygenerowanymi statycznymi projekcjami PNG. Eliminuje to komunikaty `eval`/WebGL bez osłabiania CSP przez `unsafe-eval`. Dane 3D pozostają zapisane w raporcie i będzie można ponownie włączyć interakcję po przejściu na CSP-safe strict bundle Plotly. Są to narzędzia diagnostyczne, nie zamiennik SP 800-90B non-IID.
+Raport celowo ogranicza się do wykresów 2D. Nie generuje powierzchni wolumetrycznych, chmur trójek ani dodatkowych artefaktów WebGL. Zmniejsza to czas analizy, rozmiar raportu i obciążenie przeglądarki, bez usuwania kluczowych metryk przejść bajtowych.
 
 Limity analizy można ustawić przez:
 
@@ -583,7 +583,6 @@ Limity analizy można ustawić przez:
 BINARY_GEOMETRY_REPORT=0|1
 BINARY_GEOMETRY_MAX_FILES=8
 BINARY_GEOMETRY_MAX_BYTES=16777216
-BINARY_GEOMETRY_SCATTER_POINTS=15000
 ```
 
 ### Nowe kontrole v7.3
@@ -724,7 +723,7 @@ smoke_dual_weave.sh          same-group kontra stagger-1/stagger-2
 smoke_dual_weave_stagger2.sh skupiony kandydat row-major / stagger-2
 smoke_dual_weave_lags.sh     kampania k4/k2/k8/k4: same-group kontra stagger-2
 analyze_dual_weave.py        lagi 1023/1024/1025, korelacja pozycyjna i raporty
-analyze_binary_geometry.py   histogramy bajtów, liczności, reszty vs niezależność, entropie/MI i widoki 3D
+analyze_binary_geometry.py   histogramy bajtów, liczności, reszty vs niezależność oraz entropie/MI
 run_usb_agent.sh             uruchomienie hosta USB
 run_remote_usb_smoke.sh      smoke z mTLS-Y
 run_rtsp_smoke.sh            smoke RTSP
@@ -732,7 +731,7 @@ run_one.sh                   wspólny runner obliczeniowy
 generate_mtls_pki.sh         lokalne CA i certyfikaty
 ```
 
-## Ograniczenia v7.8.4
+## Ograniczenia v7.9.0
 
 - jedna instancja przetwarza jedno źródło;
 - agent USB obsługuje jednego klienta naraz;
@@ -740,8 +739,7 @@ generate_mtls_pki.sh         lokalne CA i certyfikaty
 - brak sterowania ekspozycją kamer RTSP, ponieważ mechanizm jest zależny od producenta/ONVIF;
 - nie ma automatycznego łączenia entropii z wielu kamer;
 - stagger usuwa bezpośrednie współdzielenie grupy, ale nie dowodzi niezależności C0 i C1;
-- histogramy bajtów oraz wykresy 2D/3D są diagnostyką wizualną i nie są formalnym estymatorem min-entropii;
-- interaktywne widoki 3D zależą od WebGL, ale raport zawsze generuje ich statyczne odpowiedniki PNG;
+- histogramy bajtów i heatmapy 2D są diagnostyką wizualną i nie są formalnym estymatorem min-entropii;
 - diagnostyka live utrzymuje macierze `256×256` w pamięci dla obserwowanych etapów; dla wielu wariantów dual weave należy ograniczyć `LIVE_HEATMAP_MAX_STAGES`;
 - certyfikacja i deklaracja min-entropii nadal wymagają pełnej oceny źródła.
 
@@ -759,3 +757,35 @@ Po włączeniu tokenu share dostępne są również:
 ## Buforowane klatki Y8 / LSB
 
 Projekt może równolegle zapisywać surowe klatki Y8 lub pakowane LSB i używać ich jako źródła `dataset-y`, także w trakcie rośnięcia datasetu. Domyślny wskaźnik to `data/frame-buffer-latest`. Pełna instrukcja, format plików i zasady bezpiecznego odczytu LIVE znajdują się w [BUFFERED_DATASETS.md](BUFFERED_DATASETS.md).
+
+<!-- CAMERA_ENTROPY_MULTI_LSB_V7_9 -->
+## Multi-LSB i profil GLOBAL (v7.9.0)
+
+Domyślna konfiguracja pozostaje zgodna wstecznie:
+
+```text
+SAMPLE_MODE=xor
+LSB_BITS=1
+ENTROPY_CREDIT_BITS_PER_PIXEL=1.0
+```
+
+Zamrożona aktywna maska jest zawsze kalibrowana na czasowym XOR bitu `LSB0`, aby wyniki różnych profili można było porównywać. Parametry `SAMPLE_MODE` i `LSB_BITS` określają natomiast dane serializowane za tą maską:
+
+```bash
+SAMPLE_MODE=xor    LSB_BITS=2 ENTROPY_CREDIT_BITS_PER_PIXEL=0.5 ./run_one.sh
+SAMPLE_MODE=direct LSB_BITS=4 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=8192 ./run_one.sh
+SAMPLE_MODE=delta  LSB_BITS=8 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=16384 ./run_one.sh
+```
+
+Bity są zapisywane w kolejności `pixel-major-lsb-first`: dla każdego wybranego piksela najpierw `b0`, potem `b1` itd. `ENTROPY_CREDIT_BITS_PER_PIXEL` jest niezależny od liczby pobieranych bitów. To konserwatywny parametr pochodzący z zewnętrznej oceny źródła, a nie wartość dowiedziona przez ENT, Dieharder lub raport. Serwer odrzuca blok wejściowy SHA3-512, który przy zadanym kredycie wypuszczałby więcej bitów, niż wolno zaliczyć.
+
+Pełne kampanie:
+
+```bash
+./smoke_lsb_profiles.sh                 # xor/direct/delta × 1..8 LSB, łącznie 24 przebiegi
+./qualification_global_all_profiles.sh # wszystkie wcześniejsze profile WWW + kampania LSB
+```
+
+`GLOBAL_CONTINUE_ON_ERROR=1` jest ustawieniem domyślnym: po błędzie uruchamiane są kolejne profile, ale końcowy kod wyjścia pozostaje niezerowy. Każdy przebieg zapisuje `lsb_bitplane_report.html`; kampanie tworzą `lsb_campaign_report.html` oraz `global_campaign_report.html`.
+
+Raport kampanii LSB porównuje również przepustowość surowego i maskowanego wejścia, czas osiągnięcia celu SHA3 oraz przepustowość wyjścia conditionera. Raport geometrii binarnej zawiera wyłącznie histogram bajtów, macierz przejść 2D i mapę reszt Pearsona — bez wykresów 3D.

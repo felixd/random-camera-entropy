@@ -65,6 +65,7 @@ def main() -> int:
         "spatial_block_height", "temporal_spatial_offset_x",
         "temporal_spatial_offset_y", "serialization_order",
         "serialization_tile_width", "serialization_tile_height",
+        "sample_mode", "lsb_bits", "entropy_credit_bits_per_pixel",
     ):
         assert f'name="{name}"' in template
         assert name in control_server.PARAMETER_HELP
@@ -110,12 +111,18 @@ def main() -> int:
             "serialization_order": "tile-interleave",
             "serialization_tile_width": "16",
             "serialization_tile_height": "12",
+            "sample_mode": "delta",
+            "lsb_bits": "4",
+            "entropy_credit_bits_per_pixel": "0.5",
         }
         env, slug, output = manager._build_environment(payload, sources[0], "spatial-grid4", "1234567890abcdef")
         assert env["SPATIAL_MASK_PATTERN"] == "grid"
         assert env["SPATIAL_STEP_X"] == "4" and env["SPATIAL_PHASE_Y"] == "2"
         assert env["TEMPORAL_SPATIAL_OFFSET_X"] == "-2"
         assert env["SERIALIZATION_ORDER"] == "tile-interleave"
+        assert env["SAMPLE_MODE"] == "delta"
+        assert env["LSB_BITS"] == "4"
+        assert env["ENTROPY_CREDIT_BITS_PER_PIXEL"] == "0.5"
         assert slug.startswith("web-spatial-grid4-") and output.name == slug
 
         campaign_env, campaign_slug, campaign_output = manager._build_environment(
@@ -123,6 +130,12 @@ def main() -> int:
         )
         assert campaign_env["CAMPAIGN"] == campaign_slug
         assert campaign_output == data / campaign_slug
+        for profile in ("lsb-campaign", "global-all"):
+            aggregate_env, aggregate_slug, aggregate_output = manager._build_environment(
+                {}, sources[0], profile, "abcdef1234567890"
+            )
+            assert aggregate_env["CAMPAIGN"] == aggregate_slug
+            assert aggregate_output == data / aggregate_slug
 
         bad = dict(payload, spatial_phase_x="4")
         try:
@@ -131,6 +144,14 @@ def main() -> int:
             pass
         else:
             raise AssertionError("invalid grid phase was accepted")
+
+        bad_credit = dict(payload, lsb_bits="2", entropy_credit_bits_per_pixel="3")
+        try:
+            manager._build_environment(bad_credit, sources[0], "single", "badcreditbadcred")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("entropy credit above lsb_bits was accepted")
 
         campaign = data / "campaign-result"
         campaign.mkdir()

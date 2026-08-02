@@ -1,0 +1,68 @@
+===== selftest.py =====
+camera-entropy distributed v7.9.0 self-test: PASS
+RESULT selftest.py PASS
+
+===== selftest_binary_geometry.py =====
+{"status": "ok", "files": 2, "report": "/tmp/tmp1xncsdxw/run/binary_geometry_report.html"}
+binary geometry self-test: PASS
+RESULT selftest_binary_geometry.py PASS
+
+===== selftest_binary_geometry_2d.py =====
+{"status": "ok", "files": 1, "report": "/tmp/tmpdh_rsbtp/binary_geometry_report.html"}
+2D geometry self-test: PASS
+RESULT selftest_binary_geometry_2d.py PASS
+
+===== selftest_buffered_dataset.py =====
+LSB-only dataset: reconstructing neutral Y values 128/129. LSB/temporal algorithms are exact, but luminance clipping and full-Y diagnostics are not available.
+selftest_buffered_dataset: PASS
+RESULT selftest_buffered_dataset.py PASS
+
+===== selftest_cli_lsb_validation.py =====
+CLI multi-LSB validation self-test: PASS
+RESULT selftest_cli_lsb_validation.py PASS
+
+===== selftest_control_spatial.py =====
+control/spatial/docs self-test: PASS
+RESULT selftest_control_spatial.py PASS
+
+===== selftest_entropy_bitplanes.py =====
+entropy bit-plane self-test: PASS
+RESULT selftest_entropy_bitplanes.py PASS
+
+===== selftest_live_byte_diagnostics.py =====
+live byte diagnostics self-test: PASS
+RESULT selftest_live_byte_diagnostics.py PASS
+
+===== selftest_lsb_bitplane_analysis.py =====
+LSB bit-plane analysis self-test: PASS
+RESULT selftest_lsb_bitplane_analysis.py PASS
+
+===== selftest_lsb_campaign_summary.py =====
+LSB campaign summary self-test: PASS
+RESULT selftest_lsb_campaign_summary.py PASS
+
+===== selftest_profile_campaigns.py =====
+profile/global campaign self-test: PASS
+RESULT selftest_profile_campaigns.py PASS
+
+===== selftest_spatial_sampling.py =====
+spatial sampling self-test: PASS
+RESULT selftest_spatial_sampling.py PASS
+
+===== selftest_temporal_sha3.py =====
+temporal SHA3 profile self-test: PASS
+RESULT selftest_temporal_sha3.py PASS
+
+===== selftest_tls_reconnect.py =====
+TLS reconnect integration self-test: PASS
+RESULT selftest_tls_reconnect.py PASS
+
+===== selftest_transport_lifecycle.py =====
+transport lifecycle self-test: PASS
+RESULT selftest_transport_lifecycle.py PASS
+
+===== selftest_worker_state_header.py =====
+worker state header self-test: PASS
+RESULT selftest_worker_state_header.py PASS
+
+OVERALL=PASS

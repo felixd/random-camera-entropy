@@ -48,7 +48,7 @@ from werkzeug.security import check_password_hash
 
 from spatial_docs import register_documentation_routes
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.02.camera-entropy-distributed-control.7.8.4"
+APP_VERSION = "2026.08.02.camera-entropy-distributed-control.7.9.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -86,6 +86,8 @@ ALLOWED_PROFILES = {
     "dual-weave-stagger2": "smoke_dual_weave_stagger2.sh",
     "dual-weave-lags": "smoke_dual_weave_lags.sh",
     "dual-weave-stagger-qualification": "qualification_dual_weave_stagger.sh",
+    "lsb-campaign": "smoke_lsb_profiles.sh",
+    "global-all": "qualification_global_all_profiles.sh",
 }
 
 PROFILE_LABELS = {
@@ -110,9 +112,13 @@ PROFILE_LABELS = {
     "dual-weave-stagger2": "Dual weave — row-major / stagger-2",
     "dual-weave-lags": "Dual weave — kampania lagów",
     "dual-weave-stagger-qualification": "Dual weave — kwalifikacja stagger-2",
+    "lsb-campaign": "LSB — pełna kampania 1..8 bitów",
+    "global-all": "GLOBAL — wszystkie profile i kampanie",
 }
 
 PROFILE_HELP = {
+    "lsb-campaign": "Porównuje temporal XOR, bezpośrednie Y i delta dla 1..8 dolnych bitów; generuje wspólne podsumowanie.",
+    "global-all": "Uruchamia kolejno każdy wcześniejszy profil WWW oraz pełną kampanię LSB. Kontynuuje po błędach i zapisuje raport zbiorczy.",
     "spatial-baseline": "Pełna zamrożona maska, brak offsetu, kolejność row-major. Punkt odniesienia.",
     "spatial-checker-even": "Jedna faza szachownicy; usuwa bezpośrednie sąsiedztwo poziome i pionowe.",
     "spatial-checker-odd": "Komplementarna faza szachownicy do porównania asymetrii matrycy/ISP.",
@@ -131,6 +137,9 @@ PARAMETER_HELP = {
     "profile": "Gotowy zestaw parametrów i rozmiarów testu. Profile spatial wymuszają opisaną geometrię.",
     "exposure": "Ręczna ekspozycja źródła. Zmiana wpływa na fizykę źródła i wymaga nowej kalibracji.",
     "pair_lag_frames": "Odstęp czasowy k pomiędzy ramkami. To nie jest odległość pomiędzy pikselami.",
+    "sample_mode": "xor = czasowy XOR, direct = dolne bity bieżącej klatki Y, delta = reszta Y_t-Y_(t-k) modulo 256.",
+    "lsb_bits": "Liczba pobieranych dolnych bitów próbki: 1..8. Więcej danych nie oznacza automatycznie takiej samej liczby bitów entropii.",
+    "entropy_credit_bits_per_pixel": "Konserwatywny budżet entropii na wybrany piksel. Jest niezależny od lsb_bits i musi wynikać z oceny źródła.",
     "spatial_sampling": "Starsza opcja zgodności. Jest używana tylko przy spatial_mask_pattern=legacy.",
     "spatial_mask_pattern": "Właściwa maska produkcyjna: legacy, full, checkerboard, grid albo block.",
     "spatial_step_x": "Poziomy krok siatki. Dla 4 wybierana jest jedna klasa słupków modulo 4.",
@@ -325,7 +334,10 @@ class JobManager:
             return
         if not is_process_alive(pid):
             output_root = Path(str(job.get("output_root", "")))
-            ready = output_root.joinpath("READY.json").exists() or output_root.joinpath("qualification_report.html").exists()
+            ready = any(
+                output_root.joinpath(name).exists()
+                for name in ("READY.json", "qualification_report.html", "lsb_campaign_report.html", "global_campaign_report.html")
+            )
             failed = output_root.joinpath("run_failed.json").exists()
             if output_root.is_dir() and not failed:
                 failed = any(output_root.glob("**/run_failed.json"))
@@ -463,6 +475,20 @@ class JobManager:
         warmup = self._positive_int(payload, "warmup_seconds", 0, 86_400)
         calibration = self._positive_int(payload, "calibration_pairs", 32, 1_000_000)
         pair_lag = self._positive_int(payload, "pair_lag_frames", 1, 4096)
+        lsb_bits = self._positive_int(payload, "lsb_bits", 1, 8)
+        sample_mode = str(payload.get("sample_mode", "")).strip()
+        if sample_mode and sample_mode not in {"xor", "direct", "delta"}:
+            raise ValueError("sample_mode must be xor, direct or delta")
+        entropy_credit_raw = str(payload.get("entropy_credit_bits_per_pixel", "")).strip()
+        entropy_credit: float | None = None
+        if entropy_credit_raw:
+            try:
+                entropy_credit = float(entropy_credit_raw)
+            except ValueError as exc:
+                raise ValueError("entropy_credit_bits_per_pixel must be a number") from exc
+            effective_lsb_bits = lsb_bits if lsb_bits is not None else int(env.get("LSB_BITS", "1"))
+            if not 0.0 < entropy_credit <= effective_lsb_bits:
+                raise ValueError("entropy_credit_bits_per_pixel must be in (0, lsb_bits]")
         conditioner_input = self._positive_int(payload, "conditioner_input_bits", 512, 1_048_576)
         runs = self._positive_int(payload, "runs", 1, 100)
         first_warmup = self._positive_int(payload, "first_warmup_seconds", 0, 86_400)
@@ -482,6 +508,12 @@ class JobManager:
             env["CALIBRATION_PAIRS"] = str(calibration)
         if pair_lag is not None:
             env["PAIR_LAG_FRAMES"] = str(pair_lag)
+        if lsb_bits is not None:
+            env["LSB_BITS"] = str(lsb_bits)
+        if sample_mode:
+            env["SAMPLE_MODE"] = sample_mode
+        if entropy_credit is not None:
+            env["ENTROPY_CREDIT_BITS_PER_PIXEL"] = format(entropy_credit, ".12g")
         if conditioner_input is not None:
             if conditioner_input % 8:
                 raise ValueError("conditioner_input_bits musi być wielokrotnością 8")
@@ -576,7 +608,7 @@ class JobManager:
                 env[env_name] = str(mib * MIB)
 
         slug = f"web-{profile}-{timestamp_slug()}-{job_id[:8]}"
-        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign"}:
+        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "global-all"}:
             env["CAMPAIGN"] = slug
             output_root = self.settings.data_root / slug
         else:
@@ -815,18 +847,24 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         qualification = path / "qualification_report.html"
         dual_campaign = path / "dual_weave_campaign_report.html"
         spatial_campaign = path / "spatial_campaign_report.html"
+        lsb_campaign = path / "lsb_campaign_report.html"
+        global_campaign = path / "global_campaign_report.html"
         report = path / "run_report.html"
         status = "running/incomplete"
         if failed.exists():
             status = "failed"
-        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists():
+        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists() or lsb_campaign.exists() or global_campaign.exists():
             status = "complete"
         elif ready.exists():
             status = "ready"
         elif (path / "output_complete.json").exists():
             status = "analyzing"
         report_url = (
-            f"/data/{path.name}/qualification_report.html"
+            f"/data/{path.name}/global_campaign_report.html"
+            if global_campaign.exists()
+            else f"/data/{path.name}/lsb_campaign_report.html"
+            if lsb_campaign.exists()
+            else f"/data/{path.name}/qualification_report.html"
             if qualification.exists()
             else f"/data/{path.name}/dual_weave_campaign_report.html"
             if dual_campaign.exists()
@@ -837,13 +875,29 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             else None
         )
         report_label = (
+            "Global campaign" if global_campaign.exists() else
+            "LSB campaign" if lsb_campaign.exists() else
             "Kwalifikacja" if qualification.exists() else
             "Dual weave campaign" if dual_campaign.exists() else
             "Spatial campaign" if spatial_campaign.exists() else
             "Raport przebiegu" if report.exists() else "Brak raportu"
         )
         headline = ""
-        if spatial_campaign.exists():
+        if global_campaign.exists():
+            campaign_summary = read_json_object(path / "global_campaign_summary.json")
+            steps = campaign_summary.get("steps", []) if isinstance(campaign_summary.get("steps"), list) else []
+            headline = (
+                f"passed {campaign_summary.get('passed', '—')}/{len(steps) or '—'} · "
+                f"failed {campaign_summary.get('failed', '—')} · skipped {campaign_summary.get('skipped', '—')}"
+            )
+        elif lsb_campaign.exists():
+            campaign_summary = read_json_object(path / "lsb_campaign_summary.json")
+            profiles = campaign_summary.get("profiles", []) if isinstance(campaign_summary.get("profiles"), list) else []
+            headline = (
+                f"complete {campaign_summary.get('complete', '—')}/{len(profiles) or '—'} · "
+                f"failed {campaign_summary.get('failed', '—')}"
+            )
+        elif spatial_campaign.exists():
             campaign_summary = read_json_object(path / "spatial_campaign_summary.json")
             completed = campaign_summary.get("complete_profiles")
             total = campaign_summary.get("total_profiles")

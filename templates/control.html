@@ -40,8 +40,16 @@ label{display:block;margin:10px 0 5px;color:var(--muted);font-size:.84rem}.field
     <div class="field"><label class="field-label" for="pair_lag_frames">Lag ramek k</label><input id="pair_lag_frames" name="pair_lag_frames" type="number" min="1" value="4"></div>
   </div>
   <div class="row">
-    <div class="field"><label class="field-label" for="spatial_sampling">Próbkowanie przestrzenne — legacy</label><select id="spatial_sampling" name="spatial_sampling"><option>checkerboard-even</option><option>checkerboard-odd</option><option>grid2x2</option><option>full</option></select></div>
+    <div class="field"><label class="field-label" for="sample_mode">Tryb próbki Y</label><select id="sample_mode" name="sample_mode"><option value="xor">temporal XOR</option><option value="direct">direct Y</option><option value="delta">temporal delta</option></select></div>
+    <div class="field"><label class="field-label" for="lsb_bits">Liczba LSB</label><input id="lsb_bits" name="lsb_bits" type="number" min="1" max="8" value="1"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label class="field-label" for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="0.01" value="1.0"></div>
     <div class="field"><label class="field-label" for="conditioner_input_bits">Conditioner input [bit]</label><input id="conditioner_input_bits" name="conditioner_input_bits" type="number" min="512" step="8" value="2048"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label class="field-label" for="spatial_sampling">Próbkowanie przestrzenne — legacy</label><select id="spatial_sampling" name="spatial_sampling"><option>checkerboard-even</option><option>checkerboard-odd</option><option>grid2x2</option><option>full</option></select></div>
+    <div class="field"><p class="hint">Maska nadal kalibruje się z temporal XOR bitu 0. Nowe ustawienia zmieniają próbki za zamrożoną maską.</p></div>
   </div>
 
   <details open>

@@ -114,7 +114,7 @@ Następujące wyniki są diagnostyczne i same nie stanowią deklaracji min-entro
 - Monte Carlo π;
 - PASS RCT/APT;
 - brak widocznych wzorców po SHA3;
-- live histogramy etapów, heatmapa obserwowanych przejść, mapa reszt Pearsona względem niezależnych marginesów, H(X), H(Y), H(X,Y), H(Y|X), Cramér V, histogramowa Hmin par i wizualizacje 3D.
+- live histogramy etapów, heatmapa obserwowanych przejść, mapa reszt Pearsona względem niezależnych marginesów, H(X), H(Y), H(X,Y), H(Y|X), Cramér V i histogramowa Hmin par.
 
 Ocena źródła musi używać ścieżki non-IID i restart testu, wraz z dokumentacją fizycznego modelu oraz warunków działania.
 
@@ -122,7 +122,7 @@ Ocena źródła musi używać ścieżki non-IID i restart testu, wraz z dokument
 
 Baseline:
 
-- `y_temporal_masked_validation.bin`: dane do oceny bazowego noise source, packed bits MSB-first;
+- `y_temporal_masked_validation.bin`: wybrany strumień próbek przed conditioningiem, pakowany MSB-first; historyczna nazwa pliku pozostaje dla zgodności, natomiast `runner_config.json` określa `sample_mode`, `lsb_bits` i kolejność `pixel-major-lsb-first`;
 - `camera_entropy_sha3_512.bin`: kandydat kondycjonowanego wyjścia;
 - `y_temporal_vn.bin`: równoległe wyjście diagnostyczne.
 
@@ -132,7 +132,7 @@ Dual weave:
 - `dual_weave_<order>_c0_raw_validation.bin` i `...c1...`: kompozyty przed conditioningiem;
 - `dual_weave_<order>_<alignment>_conditioner_input_validation.bin`: rzeczywista kolejność bitów bloku SHA3;
 - `dual_weave_<order>_<alignment>_sha3_512.bin`: eksperymentalne wyjście kondycjonowane;
-- `binary_geometry_report.html`: diagnostyka 2D/3D najważniejszych plików BIN;
+- `binary_geometry_report.html`: diagnostyka 2D najważniejszych plików BIN;
 - `dual_weave_stagger2_checkerboard.svg`: generowany opis przepływu C0/C1 i kolejki stagger-2.
 
 ## Granica transportu w v7

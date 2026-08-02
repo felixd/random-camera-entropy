@@ -76,8 +76,8 @@ def binary_geometry_section(run: Path, summary: dict[str, Any]) -> str:
         if (run / "dual_weave_stagger2_checkerboard.svg").is_file() else ""
     )
     return (
-        '<section><h2>Geometria 2D/3D plików BIN</h2>'
-        '<p><a href="binary_geometry_report.html">Otwórz pełny interaktywny raport 2D/3D</a> · '
+        '<section><h2>Geometria 2D plików BIN</h2>'
+        '<p><a href="binary_geometry_report.html">Otwórz pełny raport 2D</a> · '
         '<a href="binary_geometry_summary.json">JSON</a> · '
         '<a href="binary_geometry_metrics.csv">CSV</a></p>'
         '<p class="muted">Dla każdego strumienia pokazujemy histogram 256 wartości bajtów, surowe liczności przejść oraz reszty Pearsona względem modelu niezależnych marginesów. '
@@ -101,6 +101,7 @@ def main() -> int:
     ready = load(run / "READY.json")
     failure = load(run / "run_failed.json")
     geometry = load(run / "binary_geometry_summary.json")
+    lsb_analysis = load(run / "lsb_bitplane_summary.json")
     analyses_container = summary.get("analyses", {}) if isinstance(summary.get("analyses"), dict) else {}
 
     stage_definitions = [
@@ -138,10 +139,13 @@ def main() -> int:
     shadow = complete.get("shadow", {}) if isinstance(complete.get("shadow"), dict) else {}
     conditioner = complete.get("conditioner", {}) if isinstance(complete.get("conditioner"), dict) else {}
 
+    sample_mode = str(config.get("sample_mode", "xor"))
+    lsb_bits = int(config.get("lsb_bits", 1) or 1)
+    sample_name = {"xor": "Temporal XOR", "direct": "Direct Y", "delta": "Temporal delta"}.get(sample_mode, sample_mode)
     pipeline_label = (
-        "Temporal LSB → mask → health → SHA3-512"
+        f"{sample_name} / {lsb_bits} LSB → mask → health → SHA3-512"
         if config.get("von_neumann_stage") is False
-        else "Temporal LSB → mask → VN + SHA3-512"
+        else f"{sample_name} / {lsb_bits} LSB → mask → VN + SHA3-512"
     )
     cards = [
         metric_card("Status", status, complete.get("app_version") or failure.get("app_version") or "", status_class),
@@ -155,6 +159,11 @@ def main() -> int:
         metric_card("SHA3 output", fmt_bytes(conditioner.get("written_bytes")), f"{fmt(conditioner.get('compression_ratio'), 5)}:1 compression"),
     ]
 
+    if lsb_analysis:
+        cards.extend([
+            metric_card("LSB symbol Hmin", fmt(lsb_analysis.get("symbol_min_entropy_bits_per_symbol"), 8), f'{lsb_analysis.get("lsb_bits", "?")} bit/symbol'),
+            metric_card("LSB max |phi|", fmt(lsb_analysis.get("max_abs_cross_plane_phi"), 8), "same-pixel cross-plane"),
+        ])
     labels = [item["label"] for item in stages]
     plot_specs = [
         {
@@ -243,9 +252,35 @@ def main() -> int:
         if (run / "dual_weave_report.html").exists() else ""
     )
     geometry_link = (
-        '<a href="binary_geometry_report.html">Geometria 2D/3D</a>'
+        '<a href="binary_geometry_report.html">Geometria 2D</a>'
         if geometry else ""
     )
+    lsb_link = (
+        '<a href="lsb_bitplane_report.html">Analiza bitów LSB</a>'
+        if lsb_analysis else ""
+    )
+    lsb_section = ""
+    if lsb_analysis:
+        plane_rows = [row for row in lsb_analysis.get("planes", []) if isinstance(row, dict)]
+        lsb_table = table_html(
+            ["Bit", "P(1)", "Shannon/bit", "Hmin marginalna/bit", "phi lag-1", "MI lag-1"],
+            [[
+                f'b{row.get("bit_plane")}', fmt(row.get("p1"), 8),
+                fmt(row.get("shannon_entropy_bits_per_bit"), 8),
+                fmt(row.get("marginal_min_entropy_bits_per_bit"), 8),
+                fmt(row.get("lag1_phi"), 8),
+                fmt(row.get("lag1_mutual_information_bits"), 8),
+            ] for row in plane_rows],
+            compact=True,
+        )
+        lsb_section = (
+            '<section><h2>Analiza poszczególnych bitów LSB</h2>'
+            '<p><a href="lsb_bitplane_report.html">Pełny raport LSB</a> · '
+            '<a href="lsb_bitplane_summary.json">JSON</a> · '
+            '<a href="lsb_bitplane_metrics.csv">CSV</a></p>'
+            '<p class="muted">Marginalne estymaty empiryczne i zależności między bitami tego samego piksela; nie są formalną deklaracją SP 800-90B.</p>'
+            + lsb_table + '</section>'
+        )
     body = (
         metrics_grid(cards)
         + '<div class="chart-grid">'
@@ -257,12 +292,13 @@ def main() -> int:
         + '</div>'
         + '<section><h2>Najważniejsze metryki</h2>' + stage_table + '</section>'
         + binary_geometry_section(run, geometry)
+        + lsb_section
         + '<details><summary>Konfiguracja przebiegu</summary>' + table_html(["Parametr", "Wartość"], config_rows, compact=True) + '</details>'
         + (f'<details><summary>Pliki wynikowe i sumy SHA-256</summary>{file_table}</details>' if file_table else "")
-        + f'<section><h2>Szczegółowe analizy</h2><p>{dual_link} {geometry_link}</p><ul>{analysis_links}</ul></section>'
+        + f'<section><h2>Szczegółowe analizy</h2><p>{dual_link} {geometry_link} {lsb_link}</p><ul>{analysis_links}</ul></section>'
         + '<section><h2>Metadane</h2><p><a href="runner_summary.json">runner_summary.json</a> · <a href="output_complete.json">output_complete.json</a> · <a href="READY.json">READY.json</a> · <a href="console.log">console.log</a></p></section>'
     )
-    navigation = '<a href="../">Katalog nadrzędny</a>' + dual_link + geometry_link
+    navigation = '<a href="../">Katalog nadrzędny</a>' + dual_link + geometry_link + lsb_link
     document = html_page(
         title=f"Raport przebiegu — {run.name}",
         subtitle=f"Status: {status}",
