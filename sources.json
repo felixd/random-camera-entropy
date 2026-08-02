@@ -27,14 +27,17 @@
     },
     {
       "id": "buffered-latest",
-      "label": "Zbuforowane klatki — ostatni dataset",
+      "label": "Zbuforowane klatki — aktualny/najnowszy dataset",
       "source_type": "dataset-y",
       "env": {
         "DATASET_DIR": "data/frame-buffer-latest",
         "WIDTH": "1280",
         "HEIGHT": "720",
         "DATASET_REALTIME": "0",
-        "DATASET_VERIFY_HASHES": "0"
+        "DATASET_VERIFY_HASHES": "0",
+        "DATASET_FOLLOW": "1",
+        "DATASET_POLL_SECONDS": "0.1",
+        "DATASET_FOLLOW_TIMEOUT_SECONDS": "0"
       }
     }
   ]

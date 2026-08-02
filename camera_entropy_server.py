@@ -4346,7 +4346,20 @@ def parse_args() -> argparse.Namespace:
         "--dataset-verify-hashes",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Verify every chunk SHA-256 before opening the dataset",
+        help="Verify SHA-256 of chunks already closed by the dataset recorder",
+    )
+    parser.add_argument(
+        "--dataset-follow",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Follow new committed frames while the dataset is still being recorded",
+    )
+    parser.add_argument("--dataset-poll-seconds", type=float, default=0.1)
+    parser.add_argument(
+        "--dataset-follow-timeout-seconds",
+        type=float,
+        default=0.0,
+        help="Stop waiting after this many idle seconds; 0 waits until the recorder finishes",
     )
     parser.add_argument("--vid", default=TARGET_VID)
     parser.add_argument("--pid", default=TARGET_PID)
@@ -4653,12 +4666,28 @@ def parse_args() -> argparse.Namespace:
             parser.error("dataset-max-frames cannot be negative")
         if args.dataset_rate <= 0:
             parser.error("dataset-rate must be positive")
+        if args.dataset_poll_seconds <= 0:
+            parser.error("dataset-poll-seconds must be positive")
+        if args.dataset_follow_timeout_seconds < 0:
+            parser.error("dataset-follow-timeout-seconds cannot be negative")
+    if args.source_type == "dataset-y":
+        if not args.dataset_dir:
+            parser.error("dataset-y source requires --dataset-dir")
+        args.dataset_dir = args.dataset_dir.expanduser().resolve()
+        if not (args.dataset_dir / "manifest.json").is_file():
+            parser.error(f"dataset manifest not found: {args.dataset_dir / 'manifest.json'}")
+        if args.dataset_start_frame < 0:
+            parser.error("dataset-start-frame cannot be negative")
+        if args.dataset_max_frames < 0:
+            parser.error("dataset-max-frames cannot be negative")
+        if args.dataset_rate <= 0:
+            parser.error("dataset-rate must be positive")
     if args.source_connect_timeout_seconds <= 0 or args.source_frame_timeout_seconds <= 0:
         parser.error("source timeouts must be positive")
     if args.rtsp_timeout_seconds <= 0:
         parser.error("rtsp-timeout-seconds must be positive")
     if args.source_type in {"rtsp", "dataset-y"} and args.manual_exposure:
-        # RTSP and immutable datasets do not expose generic V4L2 controls.
+        # RTSP and buffered datasets do not expose generic V4L2 controls.
         args.manual_exposure = False
     if not (0 <= args.clip_low < args.clip_high <= 255):
         parser.error("invalid clip limits")

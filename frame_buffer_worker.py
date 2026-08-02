@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Record source frames into immutable chunked Y8 or packed-LSB datasets."""
+"""Record source frames into live-readable chunked Y8 or packed-LSB datasets."""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ import numpy as np
 
 from frame_sources import create_frame_source
 
-APP_VERSION = "2026.08.02.camera-entropy-frame-buffer.1.0.0"
+APP_VERSION = "2026.08.02.camera-entropy-frame-buffer.1.1.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 DEFAULT_LIMIT_BYTES = 300_000_000_000
 DEFAULT_CHUNK_BYTES = 1_073_741_824
@@ -107,6 +107,11 @@ class ChunkWriter:
         self.offset += len(payload)
         return self.relative_path, start
 
+    def publish(self) -> None:
+        """Make the complete current payload visible before publishing its index row."""
+        if self.handle is not None:
+            self.handle.flush()
+
     def close_chunk(self) -> None:
         if self.handle is None:
             return
@@ -148,7 +153,7 @@ def parse_args() -> argparse.Namespace:
         "--update-latest-link",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="On a clean stop/completion update data/frame-buffer-latest symlink",
+        help="Publish data/frame-buffer-latest while recording and frame-buffer-latest-complete on clean completion",
     )
     parser.add_argument("--manifest-update-seconds", type=float, default=10.0)
 
@@ -233,17 +238,19 @@ def payload_for_frame(y: np.ndarray, storage_mode: str) -> bytes:
     return np.packbits(bits, bitorder="big").tobytes()
 
 
-def update_latest_link(dataset_dir: Path, logger: logging.Logger) -> None:
-    link = dataset_dir.parent / "frame-buffer-latest"
-    temporary = dataset_dir.parent / ".frame-buffer-latest.tmp"
+def update_dataset_link(
+    dataset_dir: Path, logger: logging.Logger, link_name: str = "frame-buffer-latest"
+) -> None:
+    link = dataset_dir.parent / link_name
+    temporary = dataset_dir.parent / f".{link_name}.tmp"
     try:
         temporary.unlink(missing_ok=True)
         # Relative link survives moving the entire data directory.
         temporary.symlink_to(dataset_dir.name, target_is_directory=True)
         os.replace(temporary, link)
-        logger.info("updated latest dataset link: %s -> %s", link, dataset_dir.name)
+        logger.info("updated dataset link: %s -> %s", link, dataset_dir.name)
     except OSError as exc:
-        logger.warning("cannot update latest dataset link %s: %s", link, exc)
+        logger.warning("cannot update dataset link %s: %s", link, exc)
 
 
 def run(args: argparse.Namespace, logger: logging.Logger) -> int:
@@ -316,6 +323,7 @@ def run(args: argparse.Namespace, logger: logging.Logger) -> int:
                 "chunk_hash": "sha256",
                 "index": "frames.csv",
                 "checksums": "checksums.sha256",
+                "live_commit_protocol": "flush-payload-then-flush-index-row",
             },
         }
         atomic_json(output_dir / "manifest.json", manifest)
@@ -332,6 +340,15 @@ def run(args: argparse.Namespace, logger: logging.Logger) -> int:
         ).open("x", encoding="utf-8") as checksum_handle:
             index = csv.DictWriter(index_handle, fieldnames=INDEX_FIELDS)
             index.writeheader()
+            index_handle.flush()
+            os.fsync(index_handle.fileno())
+            checksum_handle.flush()
+            os.fsync(checksum_handle.fileno())
+            if args.update_latest_link:
+                # From this point frame-buffer-latest intentionally means the newest
+                # dataset, including one that is currently growing. Readers use the
+                # index rows as commit markers and can safely follow it live.
+                update_dataset_link(output_dir, logger, "frame-buffer-latest")
             writer = ChunkWriter(output_dir, args.chunk_bytes, checksum_handle, logger)
             try:
                 while not stopped:
@@ -352,6 +369,11 @@ def run(args: argparse.Namespace, logger: logging.Logger) -> int:
                             f"encoded frame size changed: got={len(payload)}, expected={frame_payload_bytes}"
                         )
                     relative_chunk, offset = writer.write_frame(payload)
+                    # Commit ordering for concurrent readers:
+                    #   1. write and flush the complete payload,
+                    #   2. append and flush its frames.csv row.
+                    # A visible index row therefore always points at a complete frame.
+                    writer.publish()
                     metadata = frame.metadata or {}
                     captured_monotonic_ns = int(
                         metadata.get("captured_monotonic_ns")
@@ -378,6 +400,7 @@ def run(args: argparse.Namespace, logger: logging.Logger) -> int:
                             ),
                         }
                     )
+                    index_handle.flush()
                     frame_count += 1
                     bytes_written += frame_payload_bytes
                     now = time.monotonic()
@@ -441,7 +464,10 @@ def run(args: argparse.Namespace, logger: logging.Logger) -> int:
             },
         )
         if status in {"complete", "stopped"} and frame_count >= 2 and args.update_latest_link:
-            update_latest_link(output_dir, logger)
+            # Keep a stable pointer to the newest finished dataset as well as the
+            # live-capable frame-buffer-latest pointer.
+            update_dataset_link(output_dir, logger, "frame-buffer-latest")
+            update_dataset_link(output_dir, logger, "frame-buffer-latest-complete")
     logger.info(
         "recording finished status=%s frames=%d bytes=%d directory=%s",
         status,

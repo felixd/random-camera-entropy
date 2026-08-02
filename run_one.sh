@@ -184,10 +184,13 @@ case "$SOURCE_TYPE" in
             --dataset-start-frame "${DATASET_START_FRAME:-0}"
             --dataset-max-frames "${DATASET_MAX_FRAMES:-0}"
             --dataset-rate "${DATASET_RATE:-1}"
+            --dataset-poll-seconds "${DATASET_POLL_SECONDS:-0.1}"
+            --dataset-follow-timeout-seconds "${DATASET_FOLLOW_TIMEOUT_SECONDS:-0}"
             --width "$WIDTH" --height "$HEIGHT" --strict-mode
         )
         if [[ "${DATASET_REALTIME:-0}" == 1 ]]; then source_args+=(--dataset-realtime); else source_args+=(--no-dataset-realtime); fi
         if [[ "${DATASET_VERIFY_HASHES:-0}" == 1 ]]; then source_args+=(--dataset-verify-hashes); fi
+        if [[ "${DATASET_FOLLOW:-1}" == 1 ]]; then source_args+=(--dataset-follow); else source_args+=(--no-dataset-follow); fi
         source_label="dataset-y://$DATASET_DIR"
         ;;
 esac
