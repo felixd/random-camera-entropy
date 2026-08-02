@@ -38,6 +38,18 @@
         "CAMERA_FPS": "10",
         "EXPOSURE": "7000"
       }
+    },
+    {
+      "id": "buffered-latest",
+      "label": "Zbuforowane klatki — ostatni dataset",
+      "source_type": "dataset-y",
+      "env": {
+        "DATASET_DIR": "/workspaces/random-camera-entropy/data/frame-buffer-latest",
+        "WIDTH": "1280",
+        "HEIGHT": "720",
+        "DATASET_REALTIME": "0",
+        "DATASET_VERIFY_HASHES": "0"
+      }
     }
   ]
 }

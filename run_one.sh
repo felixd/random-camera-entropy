@@ -67,7 +67,7 @@ RTSP_TEMP_FILE=""
 for value in "$DIAGNOSTIC_VN_BYTES" "$CONDITIONED_BYTES" "$VALIDATION_BYTES"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Rozmiary wyjścia muszą być liczbami całkowitymi"
 done
-[[ "$SOURCE_TYPE" =~ ^(v4l2|tls-y|rtsp)$ ]] || fail "SOURCE_TYPE=v4l2, tls-y albo rtsp"
+[[ "$SOURCE_TYPE" =~ ^(v4l2|tls-y|rtsp|dataset-y)$ ]] || fail "SOURCE_TYPE=v4l2, tls-y, rtsp albo dataset-y"
 [[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
 [[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"
 for value in "$SPATIAL_STEP_X" "$SPATIAL_STEP_Y" "$SPATIAL_PHASE_X" "$SPATIAL_PHASE_Y" "$SPATIAL_BLOCK_WIDTH" "$SPATIAL_BLOCK_HEIGHT" "$SERIALIZATION_TILE_WIDTH" "$SERIALIZATION_TILE_HEIGHT"; do
@@ -174,6 +174,21 @@ case "$SOURCE_TYPE" in
         )
         if [[ "${RTSP_STRICT_DIMENSIONS:-0}" == 1 ]]; then source_args+=(--strict-mode); else source_args+=(--no-strict-mode); fi
         source_label="rtsp (URL redacted)"
+        ;;
+    dataset-y)
+        DATASET_DIR="${DATASET_DIR:-$DATA_ROOT/frame-buffer-latest}"
+        [[ -d "$DATASET_DIR" ]] || fail "Brak katalogu DATASET_DIR=$DATASET_DIR"
+        [[ -r "$DATASET_DIR/manifest.json" ]] || fail "Brak manifestu datasetu: $DATASET_DIR/manifest.json"
+        source_args+=(
+            --dataset-dir "$DATASET_DIR"
+            --dataset-start-frame "${DATASET_START_FRAME:-0}"
+            --dataset-max-frames "${DATASET_MAX_FRAMES:-0}"
+            --dataset-rate "${DATASET_RATE:-1}"
+            --width "$WIDTH" --height "$HEIGHT" --strict-mode
+        )
+        if [[ "${DATASET_REALTIME:-0}" == 1 ]]; then source_args+=(--dataset-realtime); else source_args+=(--no-dataset-realtime); fi
+        if [[ "${DATASET_VERIFY_HASHES:-0}" == 1 ]]; then source_args+=(--dataset-verify-hashes); fi
+        source_label="dataset-y://$DATASET_DIR"
         ;;
 esac
 

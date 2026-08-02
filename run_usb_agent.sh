@@ -40,6 +40,7 @@ command=(
   --control-check-seconds "${CONTROL_CHECK_SECONDS:-60}"
   --listen-host "${LISTEN_HOST:-0.0.0.0}" --listen-port "${TLS_PORT:-9443}"
   --socket-timeout-seconds "${SOCKET_TIMEOUT_SECONDS:-60}"
+  --client-backlog-frames "${CLIENT_BACKLOG_FRAMES:-16}"
   --tls-ca "$TLS_CA" --tls-cert "$TLS_CERT" --tls-key "$TLS_KEY"
   --source-id "${SOURCE_ID:-camera}"
 )

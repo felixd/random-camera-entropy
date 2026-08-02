@@ -111,7 +111,7 @@ PROFILE_HELP = {
 }
 
 PARAMETER_HELP = {
-    "source_id": "Zdefiniowane po stronie serwera źródło V4L2, TLS-Y, RTSP albo zapisany dataset Y/LSB. Dane uwierzytelniające i ścieżki nie trafiają do przeglądarki.",
+    "source_id": "Zdefiniowane po stronie serwera źródło V4L2, TLS-Y albo RTSP. Dane uwierzytelniające nie trafiają do przeglądarki.",
     "profile": "Gotowy zestaw parametrów i rozmiarów testu. Profile spatial wymuszają opisaną geometrię.",
     "exposure": "Ręczna ekspozycja źródła. Zmiana wpływa na fizykę źródła i wymaga nowej kalibracji.",
     "pair_lag_frames": "Odstęp czasowy k pomiędzy ramkami. To nie jest odległość pomiędzy pikselami.",
@@ -155,7 +155,7 @@ ALLOWED_SPATIAL = {
     "checkerboard-odd",
     "grid2x2",
 }
-ALLOWED_SOURCE_TYPES = {"v4l2", "tls-y", "rtsp", "dataset-y"}
+ALLOWED_SOURCE_TYPES = {"v4l2", "tls-y", "rtsp"}
 MIB = 1024 * 1024
 
 

@@ -643,9 +643,4 @@ def create_frame_source(args: Any, logger: logging.Logger) -> FrameSource:
         return TlsYSource(args, logger)
     if args.source_type == "rtsp":
         return RtspFfmpegSource(args, logger)
-    if args.source_type == "dataset-y":
-        # Imported lazily to avoid a module cycle: dataset_frame_source uses
-        # FrameSource and SourceFrame defined in this module.
-        from dataset_frame_source import DatasetYSource
-        return DatasetYSource(args, logger)
     raise ValueError(f"unsupported source type: {args.source_type}")

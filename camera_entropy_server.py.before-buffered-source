@@ -3240,11 +3240,6 @@ class Service:
             self.source = create_frame_source(self.args, self.logger)
             self.source.open()
             self.source_manifest = self.source.manifest()
-            if not bool(self.source_manifest.get("has_full_luma", True)):
-                self.logger.warning(
-                    "Source contains packed LSB only. Temporal/LSB processing is exact, but "
-                    "full-luminance clipping diagnostics use neutral 128/129 reconstruction."
-                )
             self.source_connection_generation = int(getattr(self.source, "connection_generation", 0))
             self.source_reconnect_count = int(getattr(self.source, "reconnect_count", 0))
             self.device = self.source.label
@@ -3294,21 +3289,13 @@ class Service:
                 self.verify_camera_controls(source_frame.frame_id, received_now)
 
                 if not self.warmup_complete:
-                    reported_warmup = source_frame.metadata.get("source_warmup_seconds")
-                    if reported_warmup is not None:
-                        observed_warmup = max(0.0, float(reported_warmup))
-                        if observed_warmup < self.args.thermal_warmup_seconds:
-                            continue
-                    else:
-                        if received_now < (self.warmup_deadline_monotonic or received_now):
-                            continue
-                        observed_warmup = self.args.thermal_warmup_seconds
+                    if received_now < (self.warmup_deadline_monotonic or received_now):
+                        continue
                     self.warmup_complete = True
                     self.pair_scheduler.reset()
                     self.last_processed_monotonic = None
                     self.logger.info(
-                        "Thermal warm-up complete; source age %.3f seconds, required %.3f seconds; calibration begins",
-                        observed_warmup,
+                        "Thermal warm-up complete after %.3f seconds; calibration begins",
                         self.args.thermal_warmup_seconds,
                     )
 
@@ -4288,13 +4275,13 @@ def build_startup_parameters(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Distributed temporal entropy processor for V4L2, mTLS Y8, RTSP and buffered datasets"
+        description="Distributed temporal entropy processor for V4L2, mTLS Y8 and RTSP sources"
     )
     parser.add_argument(
         "--source-type",
-        choices=("v4l2", "tls-y", "rtsp", "dataset-y"),
+        choices=("v4l2", "tls-y", "rtsp"),
         default="v4l2",
-        help="Frame input: local V4L2, remote raw-Y mTLS agent, decoded RTSP luma, or a buffered dataset",
+        help="Frame input: local V4L2, remote raw-Y mTLS agent, or decoded RTSP luma",
     )
     parser.add_argument("--device")
     parser.add_argument("--tls-host")
@@ -4332,22 +4319,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rtsp-luma-mode", choices=("extract-y", "gray-convert"), default="extract-y")
     parser.add_argument("--ffmpeg-bin", default="ffmpeg")
     parser.add_argument("--ffprobe-bin", default="ffprobe")
-    parser.add_argument("--dataset-dir", type=Path)
-    parser.add_argument("--dataset-start-frame", type=int, default=0)
-    parser.add_argument("--dataset-max-frames", type=int, default=0)
-    parser.add_argument(
-        "--dataset-realtime",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Replay buffered frames with their recorded timing instead of processing as fast as possible",
-    )
-    parser.add_argument("--dataset-rate", type=float, default=1.0)
-    parser.add_argument(
-        "--dataset-verify-hashes",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Verify every chunk SHA-256 before opening the dataset",
-    )
     parser.add_argument("--vid", default=TARGET_VID)
     parser.add_argument("--pid", default=TARGET_PID)
     parser.add_argument("--width", type=int, default=1280)
@@ -4641,24 +4612,12 @@ def parse_args() -> argparse.Namespace:
                 parser.error(f"TLS file not found: {path}")
     if args.source_type == "rtsp" and not args.rtsp_url:
         parser.error("rtsp source requires --rtsp-url")
-    if args.source_type == "dataset-y":
-        if not args.dataset_dir:
-            parser.error("dataset-y source requires --dataset-dir")
-        args.dataset_dir = args.dataset_dir.expanduser().resolve()
-        if not (args.dataset_dir / "manifest.json").is_file():
-            parser.error(f"dataset manifest not found: {args.dataset_dir / 'manifest.json'}")
-        if args.dataset_start_frame < 0:
-            parser.error("dataset-start-frame cannot be negative")
-        if args.dataset_max_frames < 0:
-            parser.error("dataset-max-frames cannot be negative")
-        if args.dataset_rate <= 0:
-            parser.error("dataset-rate must be positive")
     if args.source_connect_timeout_seconds <= 0 or args.source_frame_timeout_seconds <= 0:
         parser.error("source timeouts must be positive")
     if args.rtsp_timeout_seconds <= 0:
         parser.error("rtsp-timeout-seconds must be positive")
-    if args.source_type in {"rtsp", "dataset-y"} and args.manual_exposure:
-        # RTSP and immutable datasets do not expose generic V4L2 controls.
+    if args.source_type == "rtsp" and args.manual_exposure:
+        # RTSP control is camera/vendor-specific and is intentionally not guessed.
         args.manual_exposure = False
     if not (0 <= args.clip_low < args.clip_high <= 255):
         parser.error("invalid clip limits")
