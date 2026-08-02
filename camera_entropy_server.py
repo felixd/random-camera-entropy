@@ -59,7 +59,7 @@ from spatial_sampling import (
 # CAMERA_ENTROPY_SPATIAL_V7_7
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.02.camera-entropy-distributed.7.7.0"
+APP_VERSION = "2026.08.02.camera-entropy-distributed.7.8.4"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"

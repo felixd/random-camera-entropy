@@ -1,5 +1,17 @@
 # Changelog
 
+## 7.8.4 — 2026-08-02
+
+- agent USB utrzymuje ciągły capture V4L2 także bez klienta i przekazuje czas startu, uptime oraz `source_warmup_seconds`;
+- dodano ciągły rejestrator pełnych klatek Y8 albo pakowanych LSB z limitem domyślnym 300 GB i chunkami SHA-256;
+- `frame-buffer-latest` jest publikowany podczas zapisu, a `dataset-y` bezpiecznie śledzi rosnący `frames.csv` z wpisem indeksu jako znacznikiem zatwierdzenia klatki;
+- zakończone datasety o statusie `stopped` są prawidłowym źródłem obliczeń;
+- domyślna ścieżka datasetu jest przenośna: `data/frame-buffer-latest`, również w `sources.example.json`;
+- control server wykonuje preflight manifestu i indeksu, pobiera geometrię z datasetu i rozwiązuje ścieżkę względem katalogu projektu;
+- usunięto wyścig `os.getpgid(pid)` przy natychmiastowym zakończeniu workera; endpoint startu zwraca teraz JSON zamiast ogólnej strony HTML 500;
+- surowe katalogi `frame-buffer-*` nie są pokazywane jako przebiegi raportowe;
+- dodano testy regresyjne Y8/LSB, zatrzymanego datasetu i procesu kończącego się natychmiast po starcie.
+
 ## Unreleased — interfejs operatora
 
 - Pomoc po najechaniu i fokusie jest renderowana jako `position: fixed` obok kursora lub aktywnego pola, więc pozostaje w bieżącym viewport.

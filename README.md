@@ -1,7 +1,7 @@
-# Camera Entropy Distributed v7.7.0
+# Camera Entropy Distributed v7.8.4
 
 
-## Korelacja przestrzenna, maski i dokumentacja v7.7.0
+## Korelacja przestrzenna, maski i dokumentacja v7.8.4
 
 Wersja 7.7.0 dodaje konfigurowalne maski `full`, obie fazy checkerboard, ogólną siatkę `grid`, wybór jednej pozycji z bloku `block`, przestrzenny offset temporalnego XOR oraz kolejności `row-major`, `serpentine` i `tile-interleave`.
 
@@ -132,7 +132,7 @@ Generowanie klatki, kanału Y, mapy LSB i masek w panelu workera jest domyślnie
 
 Wyłączenie PNG masek nie wyłącza metryk dryftu, CSV, JSON ani wykresu Plotly. Dzięki temu kontrola retencji/Jaccarda nadal działa bez kosztu kodowania i przesyłania obrazów.
 
-## Raporty i diagnostyka live v7.7.0
+## Raporty i diagnostyka live v7.8.4
 
 Raporty są teraz projektowane jako krótki panel decyzyjny, a nie surowy zrzut wszystkich pól. Najważniejsze metryki i werdykt znajdują się na górze, a pełne tabele pozostają w sekcjach rozwijanych.
 
@@ -732,7 +732,7 @@ run_one.sh                   wspólny runner obliczeniowy
 generate_mtls_pki.sh         lokalne CA i certyfikaty
 ```
 
-## Ograniczenia v7.7.0
+## Ograniczenia v7.8.4
 
 - jedna instancja przetwarza jedno źródło;
 - agent USB obsługuje jednego klienta naraz;
@@ -755,3 +755,7 @@ Po włączeniu tokenu share dostępne są również:
 ```
 
 `api/latest` zwraca metadane najnowszego przebiegu oraz, gdy istnieją, `qualification_summary.json`, `dual_weave_report.json`, `binary_geometry_summary.json`, `runner_summary.json`, `READY.json` lub `run_failed.json`. Dzięki temu zewnętrzny analizator może odczytać wynik bez dostępu do panelu administracyjnego.
+
+## Buforowane klatki Y8 / LSB
+
+Projekt może równolegle zapisywać surowe klatki Y8 lub pakowane LSB i używać ich jako źródła `dataset-y`, także w trakcie rośnięcia datasetu. Domyślny wskaźnik to `data/frame-buffer-latest`. Pełna instrukcja, format plików i zasady bezpiecznego odczytu LIVE znajdują się w [BUFFERED_DATASETS.md](BUFFERED_DATASETS.md).

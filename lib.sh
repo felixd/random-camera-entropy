@@ -53,6 +53,7 @@ PY
     "$VENV_PYTHON" -m py_compile "$SCRIPT_DIR"/*.py
     "$VENV_PYTHON" "$SCRIPT_DIR/selftest.py" || fail "Self-test aplikacji nie powiódł się"
     "$VENV_PYTHON" "$SCRIPT_DIR/control_selftest.py" || fail "Self-test control servera nie powiódł się"
+    "$VENV_PYTHON" "$SCRIPT_DIR/selftest_buffered_dataset.py" || fail "Self-test bufora datasetu nie powiódł się"
 }
 
 check_device() {

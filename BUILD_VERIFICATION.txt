@@ -1,92 +1,27 @@
-Camera Entropy Distributed v7.7.0 — build verification
-======================================================
+Camera Entropy Distributed v7.8.4 — build verification
 
-Validated in CAAS on 2026-08-02 against the exact uploaded archive:
-camera-entropy-distributed-v7.6.1(1).zip
-SHA-256: eb6cf3494e43e90413a3c61fa813d2dc1b41fc84b09ce82163f85560c9546171
+Source basis
+- Built directly from the complete archive supplied by the user on 2026-08-02.
+- No patch installer and no backup copies are included.
 
-Integration basis
------------------
-- The v7.7.0 source tree was produced from the user's complete v7.6.1 archive,
-  not from a synthetic approximation or a partial patch target.
-- The preparatory patcher's --check mode recognized all required v7.6.1
-  integration anchors before any source modification.
-- The resulting v7.7.0 tree was then reviewed and corrected directly.
+Implemented and verified statically
+- Continuous USB-agent capture and source warm-up metadata.
+- Y8 and packed-LSB frame recorder with 300 GB default limit.
+- Safe concurrent dataset reading based on payload-first/index-row commit ordering.
+- Relative default DATASET_DIR=data/frame-buffer-latest in both source configurations.
+- Dataset preflight in the control server and in run_one.sh.
+- Geometry is loaded from manifest.json rather than trusted from the source preset.
+- Stopped datasets remain readable.
+- start_new_session PID/PGID race removed; API start errors remain JSON.
+- Raw frame-buffer directories are excluded from the reports list.
 
-Implemented in v7.7.0
----------------------
-- General spatial masks: full, both checkerboard phases, grid and block.
-- Configurable X/Y step, phase and block dimensions.
-- Temporal XOR with a configurable spatial pixel offset.
-- Strict non-wrapping edge handling; invalid offset borders are excluded from
-  calibration, clipping checks, shadow masks, RAW validation and production.
-- Deterministic row-major, serpentine and tile-interleave serialization.
-- Cached mask-to-index traversal for production throughput.
-- Independent smoke profiles plus a complete spatial comparison campaign.
-- Spatial campaign JSON/HTML summary generation.
-- New parameters persisted in runner configuration and worker reports.
-- Persistent control-panel fields, profile presets and contextual hover/focus
-  help for every spatial parameter.
-- Authenticated read-only documentation browser under /docs/ for README,
-  Markdown, text and project instruction/documentation files.
-- Safe Markdown subset renderer: raw HTML is escaped and unsafe URI schemes
-  are rejected.
-- Sticky worker header now exposes phase progress from the same `/api/stats`
-  fields as the detailed cards: warm-up remaining time, calibration pair count,
-  and output progress after production starts.
+Checks run in the build environment
+- Python syntax compilation for all project Python files.
+- Bash syntax validation for all project shell scripts.
+- Existing core selftest.py.
+- New Y8/LSB dataset round-trip test.
+- Static and isolated JobManager regression for an immediately exiting child process.
 
-Checks performed
-----------------
-- python3 -m compileall for the complete source tree
-- bash -n for every top-level shell script
-- Jinja parsing for templates/control.html
-- selftest.py: PASS
-- selftest_spatial_sampling.py: PASS
-  - checkerboard complementarity
-  - grid and block cardinality
-  - positive and negative spatial offsets
-  - no edge wrap-around
-  - row-major, serpentine and tile-interleave order
-  - cached serialization traversal reuse
-- selftest_control_spatial.py: PASS
-  - profile/script mapping
-  - control payload validation and environment generation
-  - campaign indexing
-  - documentation discovery and HTML escaping
-- selftest_temporal_sha3.py: PASS
-- selftest_live_byte_diagnostics.py: PASS
-- selftest_binary_geometry.py: PASS
-- selftest_transport_lifecycle.py: PASS
-- selftest_tls_reconnect.py: PASS
-- selftest_worker_state_header.py: PASS
-  - warm-up remaining/total duration and progress fraction
-  - calibration pair current/target and percentage
-  - conditioner output progress without falling back to unrelated RAW counters
-  - DOM update of state text, detail, ARIA progress and bar width
-- synthetic spatial campaign summarizer: PASS
-- ZIP CRC and source SHA256SUMS verification
-
-Environment limitation
-----------------------
-The CAAS build image did not contain Flask/Werkzeug and could not install them
-from its isolated package index. Therefore control_selftest.py was not run
-against a live Flask test client here. The Flask-independent control integration
-self-test and Jinja parser both passed. Flask is an explicit runtime dependency
-in requirements.txt and the live control test should be run after installing
-those dependencies on the target server.
-
-Not executed here
------------------
-- physical USB/V4L2 or RTSP camera capture
-- deployment through the target systemd/nginx configuration
-- live browser interaction with the control panel
-- full long-duration spatial qualification campaign
-
-Recommended target-host acceptance
-----------------------------------
-1. Install requirements.txt in the production virtual environment.
-2. Run control_selftest.py and all selftest_*.py files.
-3. Start with smoke_spatial_baseline.sh and one grid/checkerboard profile.
-4. Run smoke_spatial_profiles.sh only after the short smoke profiles pass.
-5. Compare RAW pre-SHA3 heatmaps, multi-lag correlations and throughput before
-   choosing a production mask. SHA3 output alone is not a selection criterion.
+Limitations of build environment
+- No physical V4L2 camera, mTLS endpoint, or production data volume was available.
+- Flask was not preinstalled and package download was unavailable; control-server behavior was tested with an isolated import shim plus source-level regression checks.

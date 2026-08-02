@@ -10,6 +10,7 @@ remain in server-side configuration files.
 from __future__ import annotations
 
 import argparse
+import csv
 import hmac
 import json
 import logging
@@ -47,7 +48,22 @@ from werkzeug.security import check_password_hash
 
 from spatial_docs import register_documentation_routes
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.02.camera-entropy-distributed-control.7.7.0"
+APP_VERSION = "2026.08.02.camera-entropy-distributed-control.7.8.4"
+DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
+READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
+SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
+REQUIRED_DATASET_INDEX_FIELDS = {
+    "sequence",
+    "source_frame_id",
+    "chunk",
+    "offset",
+    "payload_bytes",
+    "captured_unix_ns",
+    "captured_monotonic_ns",
+    "source_warmup_seconds",
+    "source_connection_generation",
+}
+
 ALLOWED_PROFILES = {
     "smoke": "smoke_preproduction.sh",
     "temporal-sha3": "smoke_temporal_sha3.sh",
@@ -347,6 +363,83 @@ class JobManager:
             raise ValueError(f"{name} musi być w zakresie {minimum}..{maximum}")
         return number
 
+    def _prepare_dataset_environment(self, env: dict[str, str]) -> None:
+        raw_dir = str(env.get("DATASET_DIR", "data/frame-buffer-latest")).strip()
+        if not raw_dir:
+            raw_dir = "data/frame-buffer-latest"
+        dataset_dir = Path(raw_dir).expanduser()
+        if not dataset_dir.is_absolute():
+            dataset_dir = self.settings.root / dataset_dir
+        dataset_dir = dataset_dir.resolve()
+        if not dataset_dir.is_dir():
+            raise ValueError(f"Dataset nie istnieje lub nie jest katalogiem: {dataset_dir}")
+
+        manifest_path = dataset_dir / "manifest.json"
+        index_path = dataset_dir / "frames.csv"
+        chunks_path = dataset_dir / "chunks"
+        if not manifest_path.is_file():
+            raise ValueError(f"Brak manifestu datasetu: {manifest_path}")
+        if not index_path.is_file():
+            raise ValueError(f"Brak indeksu klatek datasetu: {index_path}")
+        if not chunks_path.is_dir():
+            raise ValueError(f"Brak katalogu chunków datasetu: {chunks_path}")
+
+        manifest = read_json(manifest_path)
+        if not isinstance(manifest, dict):
+            raise ValueError(f"Manifest datasetu nie jest poprawnym obiektem JSON: {manifest_path}")
+        if manifest.get("format") != DATASET_FORMAT:
+            raise ValueError(
+                f"Nieobsługiwany format datasetu: {manifest.get('format')!r}; "
+                f"oczekiwano {DATASET_FORMAT!r}"
+            )
+        status = str(manifest.get("status", ""))
+        if status not in READABLE_DATASET_STATUSES:
+            raise ValueError(f"Dataset ma nieobsługiwany status: {status!r}")
+        storage_mode = str(manifest.get("storage_mode", ""))
+        if storage_mode not in SUPPORTED_DATASET_STORAGE_MODES:
+            raise ValueError(f"Dataset ma nieobsługiwany tryb zapisu: {storage_mode!r}")
+
+        try:
+            width = int(manifest.get("width", 0))
+            height = int(manifest.get("height", 0))
+            frame_payload_bytes = int(manifest.get("frame_payload_bytes", 0))
+            frame_count = int(manifest.get("frame_count", 0) or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Manifest datasetu zawiera nieprawidłowe wartości liczbowe: {manifest_path}") from exc
+        if width <= 0 or height <= 0:
+            raise ValueError(f"Dataset ma nieprawidłowy rozmiar klatki: {width}x{height}")
+        expected_payload = width * height if storage_mode == "y8" else (width * height + 7) // 8
+        if frame_payload_bytes != expected_payload:
+            raise ValueError(
+                f"Niezgodny rozmiar payloadu datasetu: manifest={frame_payload_bytes}, "
+                f"oczekiwano={expected_payload}"
+            )
+        if status != "recording" and frame_count < 2:
+            raise ValueError(
+                f"Zakończony dataset zawiera zbyt mało klatek: {frame_count}; wymagane co najmniej 2"
+            )
+
+        try:
+            with index_path.open("r", encoding="utf-8", newline="") as handle:
+                header_line = handle.readline()
+        except OSError as exc:
+            raise ValueError(f"Nie można odczytać indeksu datasetu: {index_path}: {exc}") from exc
+        if not header_line.endswith("\n"):
+            raise ValueError(f"Nagłówek indeksu datasetu jest niekompletny: {index_path}")
+        try:
+            fields = next(csv.reader([header_line]))
+        except (csv.Error, StopIteration) as exc:
+            raise ValueError(f"Nieprawidłowy nagłówek indeksu datasetu: {index_path}") from exc
+        missing = REQUIRED_DATASET_INDEX_FIELDS.difference(fields)
+        if missing:
+            raise ValueError(
+                "Indeks datasetu nie zawiera wymaganych kolumn: " + ", ".join(sorted(missing))
+            )
+
+        env["DATASET_DIR"] = str(dataset_dir)
+        env["WIDTH"] = str(width)
+        env["HEIGHT"] = str(height)
+
     def _build_environment(
         self, payload: dict[str, Any], source: dict[str, Any], profile: str, job_id: str
     ) -> tuple[dict[str, str], str, Path]:
@@ -360,6 +453,8 @@ class JobManager:
         env["PORT"] = str(self.settings.worker_port)
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "UTF-8"
+        if source["source_type"] == "dataset-y":
+            self._prepare_dataset_environment(env)
         env["WEB_IMAGES"] = "1" if payload.get("web_images", False) else "0"
         env["MASK_SNAPSHOT_IMAGES"] = "1" if payload.get("mask_snapshot_images", False) else "0"
         env["LIVE_BYTE_DIAGNOSTICS"] = "1" if payload.get("live_byte_diagnostics", True) else "0"
@@ -507,14 +602,24 @@ class JobManager:
                 raise RuntimeError(f"Brak skryptu profilu: {script.name}")
             log_path = self._log_path(job_id)
             log_stream = log_path.open("ab", buffering=0)
-            process = subprocess.Popen(
-                [str(script)],
-                cwd=self.settings.root,
-                env=env,
-                stdout=log_stream,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
+            try:
+                process = subprocess.Popen(
+                    [str(script)],
+                    cwd=self.settings.root,
+                    env=env,
+                    stdout=log_stream,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                log_stream.close()
+                self.logger.exception("Nie udało się uruchomić profilu %s", profile)
+                raise RuntimeError(f"Nie udało się uruchomić procesu: {exc}") from exc
+            # start_new_session=True makes the child the leader of a new process
+            # group, so PGID is deterministically equal to PID. Calling
+            # os.getpgid(pid) here races with scripts that exit immediately and
+            # previously produced an unhandled ProcessLookupError / HTTP 500.
+            process_group_id = process.pid
             job = {
                 "id": job_id,
                 "slug": slug,
@@ -525,7 +630,7 @@ class JobManager:
                 "started_at": utc_now(),
                 "ended_at": None,
                 "pid": process.pid,
-                "pgid": os.getpgid(process.pid),
+                "pgid": process_group_id,
                 "returncode": None,
                 "worker_url": f"http://{self.settings.worker_host}:{self.settings.worker_port}",
                 "output_root": str(output_root),
@@ -700,6 +805,10 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         return rows
     for path in root.iterdir():
         if not path.is_dir() or path.name.startswith("."):
+            continue
+        # Raw frame datasets and their live/latest symlinks are input sources,
+        # not entropy test runs. Keep them out of the reports dashboard.
+        if path.name.startswith("frame-buffer-"):
             continue
         ready = path / "READY.json"
         failed = path / "run_failed.json"
@@ -943,6 +1052,9 @@ def create_app(settings: Settings) -> Flask:
             return jsonify({"ok": True, "job": job}), 201
         except (ValueError, RuntimeError) as exc:
             return jsonify({"error": str(exc)}), 409 if "już" in str(exc) else 400
+        except Exception as exc:  # defensive boundary for the public control API
+            logger.exception("Nieoczekiwany błąd podczas uruchamiania joba")
+            return jsonify({"error": f"Nieoczekiwany błąd startu: {type(exc).__name__}: {exc}"}), 500
 
     @app.post("/api/jobs/stop")
     def api_stop_job() -> Response:

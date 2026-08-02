@@ -176,9 +176,70 @@ case "$SOURCE_TYPE" in
         source_label="rtsp (URL redacted)"
         ;;
     dataset-y)
-        DATASET_DIR="${DATASET_DIR:-$DATA_ROOT/frame-buffer-latest}"
-        [[ -d "$DATASET_DIR" ]] || fail "Brak katalogu DATASET_DIR=$DATASET_DIR"
-        [[ -r "$DATASET_DIR/manifest.json" ]] || fail "Brak manifestu datasetu: $DATASET_DIR/manifest.json"
+        DATASET_DIR="${DATASET_DIR:-data/frame-buffer-latest}"
+        if [[ "$DATASET_DIR" != /* ]]; then
+            DATASET_DIR="$SCRIPT_DIR/$DATASET_DIR"
+        fi
+        dataset_metadata="$("$VENV_PYTHON" - "$DATASET_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
+READABLE = {"recording", "complete", "stopped", "failed"}
+MODES = {"y8", "lsb-packed"}
+
+path = Path(sys.argv[1]).expanduser().resolve()
+if not path.is_dir():
+    raise SystemExit(f"Dataset nie istnieje lub nie jest katalogiem: {path}")
+manifest_path = path / "manifest.json"
+index_path = path / "frames.csv"
+chunks_path = path / "chunks"
+if not manifest_path.is_file():
+    raise SystemExit(f"Brak manifestu datasetu: {manifest_path}")
+if not index_path.is_file():
+    raise SystemExit(f"Brak indeksu datasetu: {index_path}")
+if not chunks_path.is_dir():
+    raise SystemExit(f"Brak katalogu chunków datasetu: {chunks_path}")
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Nie można odczytać manifestu datasetu: {exc}")
+if manifest.get("format") != DATASET_FORMAT:
+    raise SystemExit(f"Nieobsługiwany format datasetu: {manifest.get('format')!r}")
+status = str(manifest.get("status", ""))
+mode = str(manifest.get("storage_mode", ""))
+if status not in READABLE:
+    raise SystemExit(f"Dataset ma nieobsługiwany status: {status!r}")
+if mode not in MODES:
+    raise SystemExit(f"Dataset ma nieobsługiwany tryb zapisu: {mode!r}")
+try:
+    width = int(manifest.get("width", 0))
+    height = int(manifest.get("height", 0))
+    payload = int(manifest.get("frame_payload_bytes", 0))
+    frame_count = int(manifest.get("frame_count", 0) or 0)
+except (TypeError, ValueError) as exc:
+    raise SystemExit(f"Manifest datasetu zawiera nieprawidłowe liczby: {exc}")
+expected = width * height if mode == "y8" else (width * height + 7) // 8
+if width <= 0 or height <= 0 or payload != expected:
+    raise SystemExit(
+        f"Nieprawidłowa geometria/payload datasetu: {width}x{height}, payload={payload}, expected={expected}"
+    )
+if status != "recording" and frame_count < 2:
+    raise SystemExit(f"Zakończony dataset ma zbyt mało klatek: {frame_count}")
+print(path)
+print(width)
+print(height)
+print(status)
+PY
+)" || fail "Preflight datasetu nie powiódł się"
+        mapfile -t dataset_fields <<< "$dataset_metadata"
+        (( ${#dataset_fields[@]} == 4 )) || fail "Nieprawidłowy wynik preflightu datasetu"
+        DATASET_DIR="${dataset_fields[0]}"
+        WIDTH="${dataset_fields[1]}"
+        HEIGHT="${dataset_fields[2]}"
+        DATASET_STATUS="${dataset_fields[3]}"
+        log "Dataset: $DATASET_DIR status=$DATASET_STATUS size=${WIDTH}x${HEIGHT}"
         source_args+=(
             --dataset-dir "$DATASET_DIR"
             --dataset-start-frame "${DATASET_START_FRAME:-0}"

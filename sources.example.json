@@ -44,7 +44,7 @@
       "label": "Zbuforowane klatki — aktualny/najnowszy dataset",
       "source_type": "dataset-y",
       "env": {
-        "DATASET_DIR": "/workspaces/random-camera-entropy/data/frame-buffer-latest",
+        "DATASET_DIR": "data/frame-buffer-latest",
         "WIDTH": "1280",
         "HEIGHT": "720",
         "DATASET_REALTIME": "0",
