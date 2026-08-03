@@ -48,7 +48,7 @@ from werkzeug.security import check_password_hash
 
 from spatial_docs import register_documentation_routes
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.03.camera-entropy-distributed-control.7.9.2"
+APP_VERSION = "2026.08.03.camera-entropy-distributed-control.7.10.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}

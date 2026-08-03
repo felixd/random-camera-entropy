@@ -62,11 +62,13 @@ from entropy_bitplanes import (
     SAMPLE_MODES,
     minimum_conditioner_input_bits,
     sample_label,
+    serialize_sample_symbols,
     serialize_samples,
+    serialize_symbol_bits,
 )
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.03.camera-entropy-distributed.7.9.2"
+APP_VERSION = "2026.08.03.camera-entropy-distributed.7.10.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -93,8 +95,10 @@ FRAME_HEADER = [
 ]
 
 HEALTH_HEADER = [
-    "timestamp_utc", "frame_id", "test", "result", "details", "rct_cutoff",
-    "apt_window", "apt_cutoff", "assessed_min_entropy", "alpha",
+    "timestamp_utc", "frame_id", "test", "result", "details",
+    "sample_domain", "sample_width_bits", "alphabet_size",
+    "rct_cutoff", "apt_window", "apt_cutoff",
+    "assessed_min_entropy_bits_per_symbol", "assessed_min_entropy", "alpha",
 ]
 
 MASK_DRIFT_HEADER = [
@@ -152,7 +156,7 @@ def canonical_spatial_sampling(name: str) -> str:
 
 def entropy_pipeline_name(args: argparse.Namespace) -> str:
     mode = {"xor": "temporal-xor", "direct": "direct-y", "delta": "temporal-delta"}[args.sample_mode]
-    tail = "mask-health-sha3" if not args.von_neumann_stage else "mask-health-vn-and-sha3"
+    tail = "mask-symbol-health-sha3" if not args.von_neumann_stage else "mask-symbol-health-vn-and-sha3"
     return f"{mode}-lsb{args.lsb_bits}-{tail}"
 
 
@@ -233,12 +237,21 @@ def binomial_tail_ge(n: int, p: float, k: int) -> float:
 
 
 def compute_health_cutoffs(h_min: float, alpha: float, apt_window: int) -> tuple[int, int]:
-    if not (0 < h_min <= 1):
-        raise ValueError("assessed min-entropy must be in (0, 1]")
+    """Derive SP 800-90B RCT/APT thresholds for one source sample.
+
+    ``h_min`` is expressed in bits per *source sample symbol*.  The APT cutoff
+    is for the reference symbol selected as the first sample of each window,
+    as specified by SP 800-90B section 4.4.2.  Binary sources additionally test
+    the complementary value, which the recommendation explicitly permits.
+    """
+    if not math.isfinite(h_min) or h_min <= 0:
+        raise ValueError("assessed min-entropy must be positive and finite")
     if not (0 < alpha < 1):
         raise ValueError("health alpha must be in (0, 1)")
+    if apt_window < 2:
+        raise ValueError("APT window must be >= 2")
     rct_cutoff = 1 + math.ceil(-math.log2(alpha) / h_min)
-    maximum_symbol_probability = 2.0 ** (-h_min)
+    maximum_symbol_probability = min(1.0, 2.0 ** (-h_min))
     apt_cutoff = apt_window
     for cutoff in range(1, apt_window + 1):
         if binomial_tail_ge(apt_window, maximum_symbol_probability, cutoff) <= alpha:
@@ -248,33 +261,66 @@ def compute_health_cutoffs(h_min: float, alpha: float, apt_window: int) -> tuple
 
 
 class ContinuousHealthTests:
-    """Binary RCT and non-overlapping-window APT with a latched failure."""
+    """RCT and non-overlapping-window APT for discrete uint8 symbols.
 
-    def __init__(self, h_min: float, alpha: float, apt_window: int) -> None:
-        self.h_min = h_min
-        self.alpha = alpha
-        self.apt_window = apt_window
-        self.rct_cutoff, self.apt_cutoff = compute_health_cutoffs(h_min, alpha, apt_window)
+    For one-LSB profiles this is the historical binary test.  For k-LSB
+    profiles, the tested sample alphabet is ``0..2**k-1``.  Testing the
+    pixel-major bit serialization would create deterministic cross-plane runs
+    and false RCT failures, because adjacent bits would not be independent
+    samples from one binary source.
+    """
+
+    def __init__(
+        self,
+        h_min: float,
+        alpha: float,
+        apt_window: int,
+        *,
+        alphabet_size: int = 2,
+        sample_width_bits: int = 1,
+    ) -> None:
+        if not 2 <= int(alphabet_size) <= 256:
+            raise ValueError("health alphabet_size must be in 2..256")
+        if not 1 <= int(sample_width_bits) <= 8:
+            raise ValueError("health sample_width_bits must be in 1..8")
+        maximum_entropy = math.log2(int(alphabet_size))
+        if h_min > maximum_entropy:
+            raise ValueError(
+                f"assessed min-entropy {h_min} exceeds alphabet capacity {maximum_entropy}"
+            )
+        self.h_min = float(h_min)
+        self.alpha = float(alpha)
+        self.apt_window = int(apt_window)
+        self.alphabet_size = int(alphabet_size)
+        self.sample_width_bits = int(sample_width_bits)
+        self.rct_cutoff, self.apt_cutoff = compute_health_cutoffs(
+            self.h_min, self.alpha, self.apt_window
+        )
         self.last: Optional[int] = None
         self.run = 0
-        self.apt_buffer = np.empty(apt_window, dtype=np.uint8)
+        self.apt_buffer = np.empty(self.apt_window, dtype=np.uint8)
         self.apt_position = 0
         self.rct_failures = 0
         self.apt_failures = 0
         self.latched = False
         self.last_failure = ""
 
-    def consume(self, bits: np.ndarray) -> list[tuple[str, str]]:
+    def consume(self, samples: np.ndarray) -> list[tuple[str, str]]:
         events: list[tuple[str, str]] = []
-        if self.latched or bits.size == 0:
+        if self.latched:
             return events
+        values_array = np.asarray(samples, dtype=np.uint8).reshape(-1)
+        if values_array.size == 0:
+            return events
+        if int(values_array.max()) >= self.alphabet_size:
+            raise ValueError("health sample outside configured alphabet")
 
-        changes = np.flatnonzero(bits[1:] != bits[:-1]) + 1
-        boundaries = np.concatenate(([0], changes, [bits.size]))
+        changes = np.flatnonzero(values_array[1:] != values_array[:-1]) + 1
+        boundaries = np.concatenate(([0], changes, [values_array.size]))
         lengths = np.diff(boundaries).astype(np.int64, copy=False)
-        values = bits[boundaries[:-1]]
+        run_values = values_array[boundaries[:-1]]
 
-        if self.last is not None and values.size and int(values[0]) == self.last:
+        if self.last is not None and run_values.size and int(run_values[0]) == self.last:
             lengths[0] += self.run
 
         if lengths.size:
@@ -284,33 +330,69 @@ class ContinuousHealthTests:
                 self.latched = True
                 self.last_failure = (
                     f"RCT: run={int(lengths[index])}, cutoff={self.rct_cutoff}, "
-                    f"value={int(values[index])}"
+                    f"symbol={int(run_values[index])}"
                 )
                 events.append(("RCT", self.last_failure))
                 return events
-            self.last = int(values[-1])
+            self.last = int(run_values[-1])
             self.run = int(lengths[-1])
 
         position = 0
-        while position < bits.size and not self.latched:
-            take = min(self.apt_window - self.apt_position, bits.size - position)
-            self.apt_buffer[self.apt_position : self.apt_position + take] = bits[position : position + take]
+        while position < values_array.size and not self.latched:
+            take = min(
+                self.apt_window - self.apt_position, values_array.size - position
+            )
+            self.apt_buffer[self.apt_position : self.apt_position + take] = (
+                values_array[position : position + take]
+            )
             self.apt_position += take
             position += take
             if self.apt_position == self.apt_window:
-                ones = int(self.apt_buffer.sum())
-                zeros = self.apt_window - ones
-                if max(ones, zeros) >= self.apt_cutoff:
+                reference_symbol = int(self.apt_buffer[0])
+                reference_count = int(np.count_nonzero(self.apt_buffer == reference_symbol))
+                tested_symbol = reference_symbol
+                tested_count = reference_count
+                # SP 800-90B permits the binary extension that also checks the
+                # complementary value in the same window.  For non-binary
+                # alphabets only the first (reference) symbol is counted.
+                if self.alphabet_size == 2:
+                    complement_count = self.apt_window - reference_count
+                    if complement_count > tested_count:
+                        tested_symbol = 1 - reference_symbol
+                        tested_count = complement_count
+                if tested_count >= self.apt_cutoff:
                     self.apt_failures += 1
                     self.latched = True
                     self.last_failure = (
-                        f"APT: zeros={zeros}, ones={ones}, cutoff={self.apt_cutoff}, "
-                        f"W={self.apt_window}"
+                        f"APT: reference_symbol={reference_symbol}, "
+                        f"tested_symbol={tested_symbol}, count={tested_count}, "
+                        f"cutoff={self.apt_cutoff}, W={self.apt_window}"
                     )
                     events.append(("APT", self.last_failure))
                     return events
                 self.apt_position = 0
         return events
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "latched": self.latched,
+            "last_failure": self.last_failure,
+            "rct_failures": self.rct_failures,
+            "apt_failures": self.apt_failures,
+            "standard": "NIST SP 800-90B section 4.4",
+            "sample_domain": "symbol",
+            "sample_width_bits": self.sample_width_bits,
+            "alphabet_size": self.alphabet_size,
+            "apt_mode": (
+                "reference-symbol-and-binary-complement"
+                if self.alphabet_size == 2
+                else "reference-symbol"
+            ),
+            "assessed_min_entropy_bits_per_symbol": self.h_min,
+            "rct_cutoff": self.rct_cutoff,
+            "apt_cutoff": self.apt_cutoff,
+            "apt_window": self.apt_window,
+        }
 
 
 class FrozenPixelCalibrator:
@@ -1477,8 +1559,12 @@ class DualWeaveOrderVariant:
             for alignment in alignments
         }
         self.health = {
-            "c0": ContinuousHealthTests(args.assessed_min_entropy, args.health_alpha, args.apt_window),
-            "c1": ContinuousHealthTests(args.assessed_min_entropy, args.health_alpha, args.apt_window),
+            "c0": ContinuousHealthTests(
+                min(args.assessed_min_entropy, 1.0), args.health_alpha, args.apt_window
+            ),
+            "c1": ContinuousHealthTests(
+                min(args.assessed_min_entropy, 1.0), args.health_alpha, args.apt_window
+            ),
         }
         self.groups = 0
         self.selected_bits = 0
@@ -1694,7 +1780,9 @@ class DualWeaveExperiment:
             path = output_dir / f"dual_weave_phase_{phase}_validation.bin"
             self.phase_validation_paths[phase] = path
             self.phase_validation_writers[phase] = ContinuousBitWriter(path, validation_enabled, args.validation_output_bytes)
-            self.phase_health[phase] = ContinuousHealthTests(args.assessed_min_entropy, args.health_alpha, args.apt_window)
+            self.phase_health[phase] = ContinuousHealthTests(
+                min(args.assessed_min_entropy, 1.0), args.health_alpha, args.apt_window
+            )
         self.variants = {
             name: DualWeaveOrderVariant(name, self.alignments, output_dir, args, diagnostics)
             for name in self.orders
@@ -2103,7 +2191,13 @@ class Service:
         self.pair_delta_max = 0.0
         self.calibrator: Optional[FrozenPixelCalibrator] = None
         self.shadow: Optional[ShadowPixelMonitor] = None
-        self.health = ContinuousHealthTests(args.assessed_min_entropy, args.health_alpha, args.apt_window)
+        self.health = ContinuousHealthTests(
+            args.assessed_min_entropy,
+            args.health_alpha,
+            args.apt_window,
+            alphabet_size=1 << args.lsb_bits,
+            sample_width_bits=args.lsb_bits,
+        )
         self.last: Optional[LastFrame] = None
         self.started_monotonic = time.monotonic()
         self.production_started_monotonic: Optional[float] = None
@@ -2122,6 +2216,8 @@ class Service:
         self.vn_output_bps_ema = 0.0
         self.rate_ema_seconds = 10.0
         self.rate_history_seconds = 65.0
+        self.total_raw_input_bits = 0
+        self.total_masked_input_bits = 0
         self.total_output_bits = 0
         self.total_packed_bytes = 0
         self.total_written_bytes = 0
@@ -2287,7 +2383,11 @@ class Service:
                     output_path, args.write_output, args.max_output_bytes
                 )
                 self.spatial_variant_health[variant] = ContinuousHealthTests(
-                    args.assessed_min_entropy, args.health_alpha, args.apt_window
+                    args.assessed_min_entropy,
+                    args.health_alpha,
+                    args.apt_window,
+                    alphabet_size=1 << args.lsb_bits,
+                    sample_width_bits=args.lsb_bits,
                 )
                 self.spatial_variant_validation_paths[variant] = validation_path
                 self.spatial_variant_validation_writers[variant] = ContinuousBitWriter(
@@ -2539,12 +2639,7 @@ class Service:
                 "pending_bits": int(writer.pending.size),
                 "complete": writer.completed,
                 "output_bps_lifetime": writer.accepted_bits / production_seconds if production_seconds > 0 else 0.0,
-                "health": {
-                    "latched": health.latched,
-                    "rct_failures": health.rct_failures,
-                    "apt_failures": health.apt_failures,
-                    "last_failure": health.last_failure,
-                },
+                "health": health.status(),
                 "pixel_correlation": self.spatial_variant_correlations[name].summary(),
                 "last": self.spatial_variant_last.get(name),
             }
@@ -2770,11 +2865,7 @@ class Service:
             "active_pixels": int(self.calibrator.mask.sum())
             if self.calibrator and self.calibrator.mask is not None
             else 0,
-            "health": {
-                "latched": self.health.latched,
-                "rct_failures": self.health.rct_failures,
-                "apt_failures": self.health.apt_failures,
-            },
+            "health": self.health.status(),
             "shadow": (asdict(self.shadow.comparison) | {"bad_seen": self.shadow_bad_seen}) if self.shadow else {"bad_seen": self.shadow_bad_seen},
         }
         self.output_complete_path.write_text(
@@ -2850,12 +2941,7 @@ class Service:
             "active_pixels": int(self.calibrator.mask.sum())
             if self.calibrator and self.calibrator.mask is not None
             else 0,
-            "health": {
-                "latched": self.health.latched,
-                "last_failure": self.health.last_failure,
-                "rct_failures": self.health.rct_failures,
-                "apt_failures": self.health.apt_failures,
-            },
+            "health": self.health.status(),
             "shadow": (asdict(self.shadow.comparison) | {"bad_seen": self.shadow_bad_seen}) if self.shadow else {"bad_seen": self.shadow_bad_seen},
         }
         self.run_failed_path.write_text(
@@ -2873,9 +2959,13 @@ class Service:
     ) -> None:
         with self.lock:
             interval = max(float(frame_interval_s), 1e-9)
+            raw_count = int(raw_bits)
+            masked_count = int(masked_bits)
             self.rate_samples.append(
-                (now, interval, int(raw_bits), int(masked_bits), int(vn_bits), int(packed_bytes))
+                (now, interval, raw_count, masked_count, int(vn_bits), int(packed_bytes))
             )
+            self.total_raw_input_bits += raw_count
+            self.total_masked_input_bits += masked_count
             cutoff = now - self.rate_history_seconds
             while self.rate_samples and self.rate_samples[0][0] < cutoff:
                 self.rate_samples.popleft()
@@ -2922,6 +3012,12 @@ class Service:
             lifetime_bps = (
                 self.total_output_bits / production_seconds if production_seconds > 0.0 else 0.0
             )
+            raw_lifetime_bps = (
+                self.total_raw_input_bits / production_seconds if production_seconds > 0.0 else 0.0
+            )
+            masked_lifetime_bps = (
+                self.total_masked_input_bits / production_seconds if production_seconds > 0.0 else 0.0
+            )
             output_1s = self.rate_over_window(1.0, 4)
             output_10s = self.rate_over_window(10.0, 4)
             output_60s = self.rate_over_window(60.0, 4)
@@ -2934,6 +3030,8 @@ class Service:
                 "output_bps_ema_10s": self.vn_output_bps_ema,
                 "raw_change_bps_10s": self.rate_over_window(10.0, 2),
                 "masked_bps_10s": self.rate_over_window(10.0, 3),
+                "raw_change_bps_lifetime": raw_lifetime_bps,
+                "masked_bps_lifetime": masked_lifetime_bps,
                 "output_bps_1s": output_1s,
                 "output_bps_10s": output_10s,
                 "output_bps_60s": output_60s,
@@ -2942,6 +3040,8 @@ class Service:
                 "projected_mib_per_day_10s": (output_10s / 8.0) * 86400.0 / (1024.0 * 1024.0),
                 "source_uptime_seconds": max(0.0, now - self.started_monotonic),
                 "production_uptime_seconds": production_seconds,
+                "total_raw_input_bits": self.total_raw_input_bits,
+                "total_masked_input_bits": self.total_masked_input_bits,
                 "total_output_bits": self.total_output_bits,
                 "total_packed_bytes": self.total_packed_bytes,
                 "total_written_bytes": self.total_written_bytes,
@@ -3097,15 +3197,7 @@ class Service:
                     "last_sha256": self.last_mask_snapshot_sha256,
                 },
                 "mask_drift_history": list(self.mask_drift_history),
-                "health": {
-                    "latched": self.health.latched,
-                    "last_failure": self.health.last_failure,
-                    "rct_cutoff": self.health.rct_cutoff,
-                    "apt_window": self.health.apt_window,
-                    "apt_cutoff": self.health.apt_cutoff,
-                    "rct_failures": self.health.rct_failures,
-                    "apt_failures": self.health.apt_failures,
-                    "assessed_min_entropy": self.args.assessed_min_entropy,
+                "health": self.health.status() | {
                     "alpha": self.args.health_alpha,
                 },
                 "last": asdict(self.last) if self.last else None,
@@ -3572,9 +3664,13 @@ class Service:
                 "test": test,
                 "result": "FAIL",
                 "details": details,
+                "sample_domain": self.health.status()["sample_domain"],
+                "sample_width_bits": self.health.sample_width_bits,
+                "alphabet_size": self.health.alphabet_size,
                 "rct_cutoff": self.health.rct_cutoff,
                 "apt_window": self.health.apt_window,
                 "apt_cutoff": self.health.apt_cutoff,
+                "assessed_min_entropy_bits_per_symbol": self.args.assessed_min_entropy,
                 "assessed_min_entropy": self.args.assessed_min_entropy,
                 "alpha": self.args.health_alpha,
             }
@@ -3709,8 +3805,8 @@ class Service:
             # retained only as an explicit comparison/compatibility option.
             effective_active = active_mask & current_ok if self.args.dynamic_clip_filter else active_mask
             variant_masks = self.spatial_variant_masks(effective_active)
-            variant_bits = {
-                name: serialize_samples(
+            variant_symbols = {
+                name: serialize_sample_symbols(
                     y,
                     aligned_previous_y,
                     self.spatial_serializer,
@@ -3719,6 +3815,10 @@ class Service:
                     self.args.lsb_bits,
                 )
                 for name, mask in variant_masks.items()
+            }
+            variant_bits = {
+                name: serialize_symbol_bits(symbols, self.args.lsb_bits)
+                for name, symbols in variant_symbols.items()
             }
             masked = variant_bits["full"]
             primary_mask = variant_masks["full"]
@@ -3767,10 +3867,11 @@ class Service:
                 failure_reason = dual_failure
 
             for variant, bits_for_variant in variant_bits.items():
+                symbols_for_variant = variant_symbols[variant]
                 health = self.spatial_variant_health[variant]
                 if clip_pair_bad or self.clip_latched:
                     continue
-                for test, details in health.consume(bits_for_variant):
+                for test, details in health.consume(symbols_for_variant):
                     self.write_health_event(
                         timestamp, frame_id, f"{test}:{variant}", details
                     )
@@ -3810,6 +3911,8 @@ class Service:
 
                 selected_ones = int(bits_for_variant.sum()) if bits_for_variant.size else 0
                 self.spatial_variant_last[variant] = {
+                    "selected_symbols": int(symbols_for_variant.size),
+                    "sample_width_bits": self.args.lsb_bits,
                     "selected_bits": int(bits_for_variant.size),
                     "selected_ones": selected_ones,
                     "selected_p1": selected_ones / bits_for_variant.size if bits_for_variant.size else 0.0,
@@ -4531,10 +4634,15 @@ def parse_args() -> argparse.Namespace:
         "--assessed-min-entropy",
         type=float,
         default=0.50,
-        help="Provisional claim used only to derive health cutoffs; replace after SP800-90B assessment",
+        help="Provisional min-entropy in bits per source sample symbol, used only to derive RCT/APT cutoffs",
     )
     parser.add_argument("--health-alpha", type=float, default=2**-20)
-    parser.add_argument("--apt-window", type=int, default=1024)
+    parser.add_argument(
+        "--apt-window",
+        type=int,
+        default=None,
+        help="APT window in source symbols; default: 1024 for binary, 512 for non-binary",
+    )
     parser.add_argument("--write-output", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--max-output-bytes",
@@ -4833,6 +4941,8 @@ def parse_args() -> argparse.Namespace:
         )
     if not 1 <= args.lsb_bits <= 8:
         parser.error("lsb-bits must be in 1..8")
+    if not math.isfinite(args.assessed_min_entropy) or not 0 < args.assessed_min_entropy <= args.lsb_bits:
+        parser.error("assessed-min-entropy must be finite and in (0, lsb-bits]")
     try:
         args.minimum_conditioner_input_bits = minimum_conditioner_input_bits(
             args.lsb_bits, args.entropy_credit_bits_per_pixel
@@ -4873,8 +4983,14 @@ def parse_args() -> argparse.Namespace:
             parser.error("dual-weave conditioner input bits must be divisible by 16")
     if args.calibration_pairs < 32:
         parser.error("calibration-pairs must be >= 32")
-    if args.apt_window != 1024:
-        parser.error("binary SP800-90B APT window should be 1024")
+    expected_apt_window = 1024 if args.lsb_bits == 1 else 512
+    if args.apt_window is None:
+        args.apt_window = expected_apt_window
+    elif args.apt_window != expected_apt_window:
+        parser.error(
+            f"SP800-90B APT window must be {expected_apt_window} for "
+            f"{'binary' if args.lsb_bits == 1 else 'non-binary'} source samples"
+        )
     if args.shadow_half_life_pairs <= 0:
         parser.error("shadow-half-life-pairs must be positive")
     if args.shadow_update_every <= 0:

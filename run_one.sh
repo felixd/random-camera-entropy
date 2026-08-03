@@ -399,18 +399,28 @@ rc=$?
 set -e
 trap - INT TERM EXIT
 
+run_failed=0
+failure_reason=""
+failure_state=""
 if [[ -f "$RUN_DIR/run_failed.json" ]]; then
+    run_failed=1
     failure_reason="$(json_field "$RUN_DIR/run_failed.json" reason)"
     failure_state="$(json_field "$RUN_DIR/run_failed.json" state)"
-    fail "Przebieg zatrzymany fail-closed: ${failure_reason:-nieznany powód} (state=${failure_state:-UNKNOWN}, rc=$rc)"
+    warn "Przebieg zatrzymany fail-closed; generuję raport z częściowych danych: ${failure_reason:-nieznany powód}"
+elif [[ ! -f "$RUN_DIR/output_complete.json" ]]; then
+    fail "Przebieg nie zakończył się poprawnie i nie zapisał run_failed.json (rc=$rc)"
 fi
-[[ -f "$RUN_DIR/output_complete.json" ]] || fail "Przebieg nie zakończył się poprawnie (rc=$rc)"
 
 log "Analiza plików"
 analyze_one "$RUN_DIR/camera_entropy_sha3_512.bin" "$RUN_DIR/analysis_conditioned"
 analyze_one "$RUN_DIR/y_temporal_vn.bin" "$RUN_DIR/analysis_vn"
 analyze_one "$RUN_DIR/y_temporal_masked_validation.bin" "$RUN_DIR/analysis_selected_raw"
-"$VENV_PYTHON" "$SCRIPT_DIR/analyze_lsb_bitplanes.py" "$RUN_DIR"     --lsb-bits "$LSB_BITS" --max-bytes "$BINARY_GEOMETRY_MAX_BYTES"
+if [[ -s "$RUN_DIR/y_temporal_masked_validation.bin" ]]; then
+    "$VENV_PYTHON" "$SCRIPT_DIR/analyze_lsb_bitplanes.py" "$RUN_DIR" \
+        --lsb-bits "$LSB_BITS" --max-bytes "$BINARY_GEOMETRY_MAX_BYTES"
+else
+    warn "Pomijam analizę bitplane: brak danych masked validation"
+fi
 analyze_one "$RUN_DIR/y_temporal_raw_validation.bin" "$RUN_DIR/analysis_temporal_raw"
 analyze_one "$RUN_DIR/y_direct_lsb_common_mask_validation.bin" "$RUN_DIR/analysis_direct_lsb"
 if [[ "$SPATIAL_COMPARISON" == 1 ]]; then
@@ -446,7 +456,10 @@ write_sha256s "$RUN_DIR"
 from pathlib import Path
 import json, sys
 run=Path(sys.argv[1])
-result={"run_directory":str(run.resolve()),"status":"complete","analyses":{}}
+failure = json.loads((run/"run_failed.json").read_text()) if (run/"run_failed.json").exists() else {}
+result={"run_directory":str(run.resolve()),"status":"failed" if failure else "complete","analyses":{}}
+if failure:
+ result["failure"]={k:failure.get(k) for k in ("reason","state","timestamp_utc","app_version")}
 if (run/"dual_weave_report.json").exists():
  result["dual_weave_report"]="dual_weave_report.json"
 if (run/"binary_geometry_summary.json").exists():
@@ -464,7 +477,8 @@ for name in ("conditioned","vn","selected_raw","temporal_raw","direct_lsb"):
 print(json.dumps(result,indent=2,ensure_ascii=False))
 PY
 
-"$VENV_PYTHON" - "$RUN_DIR" <<'PY'
+if (( run_failed == 0 )); then
+    "$VENV_PYTHON" - "$RUN_DIR" <<'PY'
 from pathlib import Path
 import hashlib, json, os, sys
 run = Path(sys.argv[1])
@@ -478,5 +492,11 @@ ready = {"status":"ready","condition":"output_complete.json exists, run_failed.j
 tmp=run/"READY.json.tmp"; final=run/"READY.json"
 tmp.write_text(json.dumps(ready,indent=2,ensure_ascii=False),encoding="utf-8"); os.replace(tmp,final)
 PY
+else
+    rm -f "$RUN_DIR/READY.json" "$RUN_DIR/READY.json.tmp"
+fi
 "$VENV_PYTHON" "$SCRIPT_DIR/generate_run_report.py" "$RUN_DIR"
+if (( run_failed != 0 )); then
+    fail "Przebieg zatrzymany fail-closed: ${failure_reason:-nieznany powód} (state=${failure_state:-UNKNOWN}, rc=$rc); raport częściowy zapisany"
+fi
 log "Zakończono: $RUN_DIR (READY.json i run_report.html zapisane)"

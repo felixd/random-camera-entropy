@@ -66,30 +66,52 @@ def sample_values(
     return np.bitwise_and(values, low_mask(bits))
 
 
-def serialize_bitplanes(
-    values: np.ndarray,
+def serialize_sample_symbols(
+    current_y: np.ndarray,
+    previous_y: np.ndarray,
     serializer: Serializer,
     mask: np.ndarray,
+    mode: str,
     lsb_bits: int,
 ) -> np.ndarray:
-    """Serialize selected symbols pixel-by-pixel, with each symbol LSB-first.
+    """Return ordered low-bit sample symbols, one uint8 value per selected pixel.
 
-    Applying the spatial serializer once is both faster and safer for conditioning:
-    a short SHA3 input block sees every selected bit position instead of spending
-    long stretches inside one full-frame bit plane.
+    RCT/APT must operate on the source sample alphabet.  For a k-LSB profile the
+    source sample is a k-bit symbol, not an artificial binary stream made by
+    interleaving the bit planes of each pixel.
     """
-    bits = validate_lsb_bits(lsb_bits)
-    source = np.asarray(values, dtype=np.uint8)
+    values = sample_values(current_y, previous_y, mode, lsb_bits)
     selected_mask = np.asarray(mask, dtype=bool)
-    if source.shape != selected_mask.shape:
+    if values.shape != selected_mask.shape:
         raise ValueError("values and mask must have the same shape")
-    ordered = np.asarray(serializer.serialize(source, selected_mask), dtype=np.uint8).reshape(-1)
+    return np.asarray(serializer.serialize(values, selected_mask), dtype=np.uint8).reshape(-1)
+
+
+def serialize_symbol_bits(symbols: np.ndarray, lsb_bits: int) -> np.ndarray:
+    """Serialize already ordered symbols pixel-major, LSB-first."""
+    bits = validate_lsb_bits(lsb_bits)
+    ordered = np.asarray(symbols, dtype=np.uint8).reshape(-1)
     if ordered.size == 0:
         return np.empty(0, dtype=np.uint8)
     shifts = np.arange(bits, dtype=np.uint8)
     return np.bitwise_and(np.right_shift(ordered[:, None], shifts[None, :]), 1).astype(
         np.uint8, copy=False
     ).reshape(-1)
+
+
+def serialize_bitplanes(
+    values: np.ndarray,
+    serializer: Serializer,
+    mask: np.ndarray,
+    lsb_bits: int,
+) -> np.ndarray:
+    """Serialize selected symbols pixel-by-pixel, with each symbol LSB-first."""
+    source = np.asarray(values, dtype=np.uint8)
+    selected_mask = np.asarray(mask, dtype=bool)
+    if source.shape != selected_mask.shape:
+        raise ValueError("values and mask must have the same shape")
+    symbols = np.asarray(serializer.serialize(source, selected_mask), dtype=np.uint8).reshape(-1)
+    return serialize_symbol_bits(symbols, lsb_bits)
 
 
 def serialize_samples(
@@ -100,10 +122,10 @@ def serialize_samples(
     mode: str,
     lsb_bits: int,
 ) -> np.ndarray:
-    return serialize_bitplanes(
-        sample_values(current_y, previous_y, mode, lsb_bits),
-        serializer,
-        mask,
+    return serialize_symbol_bits(
+        serialize_sample_symbols(
+            current_y, previous_y, serializer, mask, mode, lsb_bits
+        ),
         lsb_bits,
     )
 

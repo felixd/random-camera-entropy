@@ -7,7 +7,9 @@ from entropy_bitplanes import (
     BIT_ORDER,
     minimum_conditioner_input_bits,
     sample_values,
+    serialize_sample_symbols,
     serialize_samples,
+    serialize_symbol_bits,
 )
 
 
@@ -25,9 +27,14 @@ def main() -> int:
     assert sample_values(current, previous, "direct", 2).tolist() == [[0, 3], [2, 3]]
     assert sample_values(current, previous, "delta", 8).tolist() == [[255, 2], [4, 15]]
 
+    symbols = serialize_sample_symbols(
+        current, previous, RowMajor(), mask, "direct", 2
+    )
+    assert symbols.tolist() == [0, 3, 3]
     bits = serialize_samples(current, previous, RowMajor(), mask, "direct", 2)
     # each selected pixel contributes bit 0, then bit 1
     assert bits.tolist() == [0, 0, 1, 1, 1, 1]
+    assert serialize_symbol_bits(symbols, 2).tolist() == bits.tolist()
     assert BIT_ORDER == "pixel-major-lsb-first"
     assert minimum_conditioner_input_bits(1, 1.0) == 512
     assert minimum_conditioner_input_bits(8, 1.0) == 4096

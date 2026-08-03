@@ -1,4 +1,13 @@
-# Camera Entropy Distributed v7.9.2
+# Camera Entropy Distributed v7.10.0
+
+
+## Poprawki kampanii wielobitowego LSB v7.10.0
+
+- RCT i APT są wykonywane na oryginalnych symbolach źródłowych `1..8` bitów na piksel, a nie na sztucznie serializowanym strumieniu bitplane.
+- APT używa okna 1024 próbek dla źródła binarnego oraz 512 próbek dla źródeł wielosymbolowych, zgodnie z SP 800-90B.
+- Nieudany przebieg zachowuje dane częściowe i generuje `run_report.html`, analizy BIN oraz bezpośrednie odsyłacze do przyczyny i logu.
+- Raport kampanii porównuje przepustowości lifetime, pokazuje podstawę pomiaru oraz relację `SHA3 / credited entropy`.
+- Kampania LSB domyślnie wyłącza kosztowne obrazy WWW, diagnostykę live, VN i geometrię binarną; można je ponownie włączyć zmiennymi `LSB_*`.
 
 
 ## Korelacja przestrzenna, maski i dokumentacja v7.9.0
@@ -14,7 +23,9 @@ Pełny opis parametrów i zasad interpretacji znajduje się w [SPATIAL_SAMPLING.
 
 ## Odporność transportu TLS-Y v7.6.1
 
-Agent USB otwiera teraz urządzenie V4L2 osobno dla każdej uwierzytelnionej sesji i zwalnia je natychmiast po jej zakończeniu. Zapobiega to pozostawianiu niedrenowanego strumienia OpenCV/V4L2 pomiędzy kolejnymi rundami kwalifikacji.
+> Uwaga historyczna: od v7.8 agent utrzymuje kamerę otwartą i stale pobiera klatki, aby zapewnić rzeczywisty warm-up. Poniższy opis dotyczy zachowania v7.6.1 i został zastąpiony przez model continuous capture opisany w `BUFFERED_DATASETS.md`.
+
+W v7.6.1 agent USB otwierał urządzenie V4L2 osobno dla każdej uwierzytelnionej sesji i zwalniał je natychmiast po jej zakończeniu. Zapobiegało to pozostawianiu niedrenowanego strumienia OpenCV/V4L2 pomiędzy kolejnymi rundami kwalifikacji.
 
 Zamykanie sesji używa komunikatów aplikacyjnych `close` / `close-ack`, dzięki czemu poprawne zakończenie workera nie kończy się oczekiwanym `Broken pipe` po stronie kamery.
 

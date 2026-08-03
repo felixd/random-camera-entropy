@@ -1,0 +1,18 @@
+{
+  "version": "2026.08.03.camera-entropy-distributed.7.10.0",
+  "release_date": "2026-08-03",
+  "features": {
+    "symbol_domain_health_tests": {
+      "sample_width_bits": "1..8",
+      "rct": "NIST SP 800-90B section 4.4.1 on source symbols",
+      "apt": "NIST SP 800-90B section 4.4.2 reference-symbol procedure",
+      "binary_window": 1024,
+      "non_binary_window": 512
+    },
+    "failed_run_reports": true,
+    "partial_bin_analysis": true,
+    "campaign_summary_schema": "camera-entropy-lsb-campaign-v3",
+    "campaign_lifetime_rates": true,
+    "campaign_default_heavy_diagnostics": false
+  }
+}

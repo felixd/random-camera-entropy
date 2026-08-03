@@ -1,39 +1,46 @@
-Camera Entropy Distributed v7.9.2 — build verification
+Camera Entropy Distributed v7.10.0 — build verification
 
 Source basis
-- Built directly from random-camera-entropy-dev(2).zip supplied by the user on 2026-08-03.
-- Detected base version: 2026.08.02.camera-entropy-distributed.7.9.1.
-- Source archive SHA-256: 9fb801bcbc00e7148fe05c1466bbbd29bdc6abde2acd46a19d626c711b3c5ffd.
+- Built directly from random-camera-entropy-dev(1)(1).zip supplied by the user on 2026-08-03.
+- Detected base version: 2026.08.03.camera-entropy-distributed.7.9.2.
+- Source archive SHA-256: 43b4f9d6bd1257bede71f2e8ec1e74035b4d02bf34f94d250baf839b44d8528a.
 - The release archive contains the complete source tree, not a patch or patch installer.
 - No *.before-*, *.bak or generated backup copies are included.
 
-Integrated buffered-source changes
+Integrated buffered-source and control-server changes
 - USB agent keeps V4L2 capture open and continuously drains frames while exposing source uptime/warm-up metadata.
 - Recorder stores full Y8 or packed whole-frame LSB data in committed chunks with a configurable limit (300 GB by default).
 - frame-buffer-latest is available during recording; frame-buffer-latest-complete points to the latest cleanly closed dataset.
 - dataset-y can replay a stopped dataset or follow a growing dataset without consuming a partial frame.
 - The default source path is relative: data/frame-buffer-latest.
 - Control-server dataset preflight resolves relative paths from the project root, reads geometry from manifest.json and validates frames.csv.
-- Job startup uses PID as PGID with start_new_session=True, avoiding the os.getpgid() race and generic HTML 500 responses.
+- Job startup avoids the os.getpgid() race and returns structured JSON errors instead of generic HTML 500 responses.
+- Entropy-credit input accepts localized decimal values and the web number field uses step="any".
 
-Web-control fix
-- Entropy credit uses step="any" instead of the invalid min-based 0.01 step grid.
-- Localized number fields are serialized through valueAsNumber before being sent to the API.
-- The backend additionally accepts a decimal comma from older clients or direct API calls.
+LSB campaign corrections
+- RCT/APT consume one 1..8-bit source symbol per selected pixel, before pixel-major-lsb-first bit serialization.
+- RCT uses the SP 800-90B source-symbol repetition rule.
+- APT uses the first/reference symbol of each window; binary mode also checks the complementary value.
+- Default APT windows are 1024 source samples for binary profiles and 512 for non-binary profiles.
+- Failed runs preserve and analyze non-empty partial BIN files, generate runner_summary.json and run_report.html, and do not create READY.json.
+- Campaign reports prefer lifetime RAW/masked rates, expose the selected rate basis, show SHA3/credited-entropy ratio, and link failure JSON/profile logs.
+- Batch LSB profiles disable VN, web images, live byte diagnostics, mask snapshots and binary geometry by default.
 
 Versioning
-- Root and component versions are unified at 7.9.2 with release date 2026-08-03.
+- Root and component versions are unified at 7.10.0 with release date 2026-08-03.
 
 Checks run in the build environment
 - Python compileall for the full source tree: PASS.
-- Bash syntax validation for all *.sh files: PASS.
-- JSON parsing for project configuration and feature manifests: PASS.
-- Jinja template parsing and control/spatial documentation test: PASS.
-- All selftest*.py programs: PASS (16/16).
+- Bash syntax validation for every *.sh file: PASS.
+- JSON parsing for every project *.json file: PASS.
+- Git whitespace/error check: PASS.
+- All selftest*.py programs: PASS (18/18).
+- New symbol-domain health regression test: PASS.
+- New failed-run report regression test: PASS.
 - Buffered Y8 and packed-LSB round-trip/follow tests: PASS.
 - TLS reconnect and transport lifecycle tests: PASS.
-- Final ZIP integrity test: PASS.
+- No backup artifacts detected: PASS.
 
 Not run in the build environment
-- control_selftest.py requires Flask/Werkzeug, which were not installed in the isolated build container.
-- No physical V4L2 camera, RTSP stream, production mTLS agent or multi-gigabyte dataset was available.
+- control_selftest.py requires Flask/Werkzeug, which are not installed in this isolated build environment.
+- No physical V4L2 camera, RTSP stream, production mTLS agent or multi-gigabyte live campaign was available.

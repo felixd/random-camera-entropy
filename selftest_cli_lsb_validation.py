@@ -58,6 +58,7 @@ def main() -> int:
     assert args.lsb_bits == 1
     assert args.entropy_credit_bits_per_pixel == 1.0
     assert args.minimum_conditioner_input_bits == 512
+    assert args.apt_window == 1024
 
     args = parse(
         server,
@@ -75,6 +76,7 @@ def main() -> int:
     assert args.sample_mode == "delta"
     assert args.lsb_bits == 8
     assert args.minimum_conditioner_input_bits == 16384
+    assert args.apt_window == 512
 
     expect_error(server, ["--lsb-bits", "9"], "lsb-bits must be in 1..8")
     expect_error(
@@ -93,6 +95,11 @@ def main() -> int:
         server,
         ["--lsb-bits", "2", "--entropy-credit-bits-per-pixel", "3"],
         "entropy credit must be finite and in (0, lsb_bits]",
+    )
+    expect_error(
+        server,
+        ["--lsb-bits", "3", "--apt-window", "1024"],
+        "APT window must be 512 for non-binary source samples",
     )
 
     help_output = io.StringIO()

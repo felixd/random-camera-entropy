@@ -19,7 +19,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-APP_VERSION = "2026.08.03.camera-entropy-lsb-analysis.7.9.2"
+APP_VERSION = "2026.08.03.camera-entropy-lsb-analysis.7.10.0"
 BIT_ORDER = "pixel-major-lsb-first"
 
 

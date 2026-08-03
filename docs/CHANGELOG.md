@@ -1,3 +1,12 @@
+## 7.10.0 — 2026-08-03
+
+- przeniesiono RCT/APT profili wielobitowych ze zserializowanego bitstreamu na źródłowe symbole k-bitowe;
+- wdrożono SP 800-90B APT z symbolem referencyjnym i oknami 1024/512 dla źródeł binarnych/niebinarnych;
+- nieudane przebiegi generują raporty oraz analizy częściowych danych przed zwróceniem kodu błędu;
+- raport kampanii używa przepustowości lifetime, pokazuje podstawę pomiaru, przyczynę błędu i SHA3/credited entropy;
+- wyłączono domyślnie kosztowne diagnostyki wizualne i VN w seryjnej kampanii LSB;
+- dodano testy regresyjne health testów symbolowych i raportowania przebiegów failed.
+
 ## 7.9.2 — 2026-08-03
 
 - zintegrowano w pełnym drzewie projektu ciągły warm-up agenta USB, rejestrator Y8/LSB, aktywne źródło `dataset-y`, względne `data/frame-buffer-latest` oraz poprawki startu jobów bez HTTP 500;

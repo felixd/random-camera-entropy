@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.9.2"
+APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.10.0"
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -44,6 +44,16 @@ def nested(record: dict[str, Any], *keys: str) -> Any:
             return None
         current = current.get(key)
     return current
+
+
+
+def select_rate(record: dict[str, Any], *paths: tuple[str, ...]) -> tuple[float | None, str]:
+    """Select the first positive rate and report its measurement basis."""
+    for path in paths:
+        value = finite_number(nested(record, *path))
+        if value is not None and value > 0.0:
+            return value, path[-1]
+    return None, ""
 
 
 def profile_rows(root: Path) -> list[dict[str, Any]]:
@@ -74,13 +84,17 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
         analysis = read_json(run / "analysis_conditioned" / "summary.json")
         bitplanes = read_json(run / "lsb_bitplane_summary.json")
 
-        status = str(state_record.get("status") or "")
-        if not status:
-            status = (
-                "failed"
-                if failed_report
-                else ("complete" if complete_report else "unknown")
+        # Files written by the worker are authoritative.  Profile state can be
+        # stale if the shell was interrupted between worker exit and state update.
+        status = (
+            "failed"
+            if failed_report
+            else (
+                "complete"
+                if complete_report
+                else str(state_record.get("status") or "unknown")
             )
+        )
 
         lsb_bits = int(state_record.get("lsb_bits", config.get("lsb_bits", 1)) or 1)
         credit = finite_number(
@@ -89,12 +103,18 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
                 config.get("entropy_credit_bits_per_pixel"),
             )
         )
-        masked_bps = finite_number(nested(terminal, "rates", "masked_bps_10s"))
-        if masked_bps is None or masked_bps <= 0.0:
-            masked_bps = finite_number(nested(terminal, "rates", "masked_bps_current"))
-        raw_bps = finite_number(nested(terminal, "rates", "raw_change_bps_10s"))
-        if raw_bps is None or raw_bps <= 0.0:
-            raw_bps = finite_number(nested(terminal, "rates", "raw_change_bps_current"))
+        masked_bps, masked_rate_basis = select_rate(
+            terminal,
+            ("rates", "masked_bps_lifetime"),
+            ("rates", "masked_bps_10s"),
+            ("rates", "masked_bps_current"),
+        )
+        raw_bps, raw_rate_basis = select_rate(
+            terminal,
+            ("rates", "raw_change_bps_lifetime"),
+            ("rates", "raw_change_bps_10s"),
+            ("rates", "raw_change_bps_current"),
+        )
         pixel_symbols_per_second = (
             masked_bps / lsb_bits
             if masked_bps is not None and masked_bps >= 0.0 and lsb_bits > 0
@@ -111,6 +131,18 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
             if pixel_symbols_per_second is not None and credit is not None
             else None
         )
+        conditioned_output_bps = finite_number(
+            nested(terminal, "conditioner", "output_bps_until_complete")
+        )
+        credit_utilization = (
+            conditioned_output_bps / credited_entropy_bps
+            if conditioned_output_bps is not None
+            and credited_entropy_bps is not None
+            and credited_entropy_bps > 0.0
+            else None
+        )
+        health = terminal.get("health", {}) if isinstance(terminal.get("health"), dict) else {}
+        failure_reason = str(failed_report.get("reason") or "")
 
         rows.append(
             {
@@ -129,14 +161,18 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
                     config.get("conditioner_input_bits"),
                 ),
                 "active_pixels": terminal.get("active_pixels"),
+                "raw_input_bps": raw_bps,
+                "masked_input_bps": masked_bps,
+                "raw_rate_basis": raw_rate_basis,
+                "masked_rate_basis": masked_rate_basis,
+                # Compatibility aliases for consumers of campaign schema v2.
                 "raw_input_bps_10s": raw_bps,
                 "masked_input_bps_10s": masked_bps,
                 "pixel_symbols_per_second": pixel_symbols_per_second,
                 "credited_entropy_bps": credited_entropy_bps,
                 "empirical_symbol_hmin_bps": empirical_hmin_bps,
-                "conditioned_output_bps": finite_number(
-                    nested(terminal, "conditioner", "output_bps_until_complete")
-                ),
+                "conditioned_output_bps": conditioned_output_bps,
+                "conditioned_vs_credited_entropy": credit_utilization,
                 "time_to_target_seconds": finite_number(
                     nested(terminal, "conditioner", "time_to_target_seconds")
                 ),
@@ -164,6 +200,15 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
                     else ""
                 ),
                 "state": terminal.get("state") or terminal.get("status") or result.get("status"),
+                "failure_reason": failure_reason,
+                "health_sample_domain": health.get("sample_domain"),
+                "health_sample_width_bits": health.get("sample_width_bits"),
+                "health_rct_failures": health.get("rct_failures"),
+                "health_apt_failures": health.get("apt_failures"),
+                "health_rct_cutoff": health.get("rct_cutoff"),
+                "health_apt_cutoff": health.get("apt_cutoff"),
+                "profile_log": f"{profile}.profile.log" if (root / f"{profile}.profile.log").exists() else "",
+                "failure_json": f"{profile}/run_failed.json" if failed_report else "",
                 "report": (
                     f"{profile}/run_report.html"
                     if (run / "run_report.html").exists()
@@ -180,10 +225,10 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
         ),
         None,
     )
-    baseline_masked = finite_number(baseline.get("masked_input_bps_10s")) if baseline else None
+    baseline_masked = finite_number(baseline.get("masked_input_bps")) if baseline else None
     baseline_conditioned = finite_number(baseline.get("conditioned_output_bps")) if baseline else None
     for row in rows:
-        masked = finite_number(row.get("masked_input_bps_10s"))
+        masked = finite_number(row.get("masked_input_bps"))
         conditioned = finite_number(row.get("conditioned_output_bps"))
         row["masked_throughput_vs_xor_lsb1"] = (
             masked / baseline_masked
@@ -213,7 +258,7 @@ def main() -> int:
     failed = sum(row["status"] == "failed" for row in rows)
     incomplete = len(rows) - complete - failed
     summary = {
-        "schema": "camera-entropy-lsb-campaign-v2",
+        "schema": "camera-entropy-lsb-campaign-v3",
         "app_version": APP_VERSION,
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "campaign": root.name,
@@ -243,12 +288,17 @@ def main() -> int:
         "minimum_conditioner_input_bits",
         "conditioner_input_bits",
         "active_pixels",
+        "raw_input_bps",
+        "masked_input_bps",
+        "raw_rate_basis",
+        "masked_rate_basis",
         "raw_input_bps_10s",
         "masked_input_bps_10s",
         "pixel_symbols_per_second",
         "credited_entropy_bps",
         "empirical_symbol_hmin_bps",
         "conditioned_output_bps",
+        "conditioned_vs_credited_entropy",
         "time_to_target_seconds",
         "masked_throughput_vs_xor_lsb1",
         "conditioned_throughput_vs_xor_lsb1",
@@ -264,6 +314,15 @@ def main() -> int:
         "max_cross_plane_mutual_information_bits",
         "bitplane_report",
         "state",
+        "failure_reason",
+        "health_sample_domain",
+        "health_sample_width_bits",
+        "health_rct_failures",
+        "health_apt_failures",
+        "health_rct_cutoff",
+        "health_apt_cutoff",
+        "profile_log",
+        "failure_json",
         "report",
     ]
     if rows:
@@ -277,14 +336,17 @@ def main() -> int:
     table_keys = (
         "profile",
         "status",
+        "failure_reason",
         "sample_mode",
         "lsb_bits",
         "entropy_credit_bits_per_pixel",
-        "masked_input_bps_10s",
+        "masked_input_bps",
+        "masked_rate_basis",
         "pixel_symbols_per_second",
         "credited_entropy_bps",
         "empirical_symbol_hmin_bps",
         "conditioned_output_bps",
+        "conditioned_vs_credited_entropy",
         "time_to_target_seconds",
         "masked_throughput_vs_xor_lsb1",
         "conditioned_throughput_vs_xor_lsb1",
@@ -304,14 +366,17 @@ def main() -> int:
             else "<td>—</td>"
         )
         + (
-            f'<td><a href="{html.escape(str(row["report"]))}">raport</a></td>'
-            if row["report"]
-            else "<td>—</td>"
+            '<td>'
+            + (f'<a href="{html.escape(str(row["report"]))}">raport</a> ' if row["report"] else '')
+            + (f'<a href="{html.escape(str(row["failure_json"]))}">błąd</a> ' if row["failure_json"] else '')
+            + (f'<a href="{html.escape(str(row["profile_log"]))}">log</a>' if row["profile_log"] else '')
+            + ('—' if not row["report"] and not row["failure_json"] and not row["profile_log"] else '')
+            + '</td>'
         )
         + "</tr>"
         for row in rows
     )
-    document = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kampania LSB</title><style>:root{{color-scheme:dark;--bg:#0b0f14;--panel:#131a22;--border:#2a3441;--text:#edf4fb;--muted:#94a3b5;--accent:#55b5ff;--warn:#f8d477}}*{{box-sizing:border-box}}body{{font-family:system-ui;background:var(--bg);color:var(--text);margin:0;padding:24px}}a{{color:var(--accent)}}table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}}.card{{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}}.warn{{color:var(--warn)}}.muted{{color:var(--muted)}}</style></head><body><h1>Kampania LSB</h1><p>{html.escape(root.name)} · profile {len(rows)} · complete {complete} · failed {failed} · incomplete {incomplete}</p><p class="warn">Empiryczna przepustowość Hmin jest diagnostyką pojedynczego zbioru, a nie deklaracją SP 800-90B. „Credited entropy” wykorzystuje podany zewnętrznie budżet entropy credit.</p><p class="muted">Przepustowości względne są liczone względem profilu xor/1 LSB. Bity wejściowe są serializowane pixel-major-lsb-first.</p><div class="card"><table><thead><tr><th>Profil</th><th>Status</th><th>Tryb</th><th>LSB</th><th>Credit/pixel</th><th>Masked bit/s</th><th>Pixel symbols/s</th><th>Credited entropy bit/s</th><th>Empirical Hmin bit/s</th><th>SHA3 bit/s</th><th>Time to target [s]</th><th>Masked × baseline</th><th>SHA3 × baseline</th><th>Hmin symbol</th><th>Hmin/input bit</th><th>max |phi|</th><th>max MI</th><th>LSB</th><th>Raport</th></tr></thead><tbody>{table}</tbody></table></div><p><a href="lsb_campaign_summary.json">JSON</a> · <a href="lsb_campaign_summary.csv">CSV</a></p></body></html>"""
+    document = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kampania LSB</title><style>:root{{color-scheme:dark;--bg:#0b0f14;--panel:#131a22;--border:#2a3441;--text:#edf4fb;--muted:#94a3b5;--accent:#55b5ff;--warn:#f8d477}}*{{box-sizing:border-box}}body{{font-family:system-ui;background:var(--bg);color:var(--text);margin:0;padding:24px}}a{{color:var(--accent)}}table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}}.card{{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}}.warn{{color:var(--warn)}}.muted{{color:var(--muted)}}td:nth-child(3){{white-space:normal;min-width:24rem}}</style></head><body><h1>Kampania LSB</h1><p>{html.escape(root.name)} · profile {len(rows)} · complete {complete} · failed {failed} · incomplete {incomplete}</p><p class="warn">Empiryczna przepustowość Hmin jest diagnostyką pojedynczego zbioru, a nie deklaracją SP 800-90B. „Credited entropy” wykorzystuje podany zewnętrznie budżet entropy credit.</p><p class="muted">Przepustowości względne są liczone względem profilu xor/1 LSB. Do porównań używane są przepustowości lifetime z tego samego okresu produkcyjnego. RCT/APT działa na k-bitowych symbolach pikseli; dopiero wejście conditionera jest serializowane pixel-major-lsb-first.</p><div class="card"><table><thead><tr><th>Profil</th><th>Status</th><th>Failure reason</th><th>Tryb</th><th>LSB</th><th>Credit/pixel</th><th>Masked bit/s</th><th>Rate basis</th><th>Pixel symbols/s</th><th>Credited entropy bit/s</th><th>Empirical Hmin bit/s</th><th>SHA3 bit/s</th><th>SHA3 / credited</th><th>Time to target [s]</th><th>Masked × baseline</th><th>SHA3 × baseline</th><th>Hmin symbol</th><th>Hmin/input bit</th><th>max |phi|</th><th>max MI</th><th>LSB</th><th>Raport</th></tr></thead><tbody>{table}</tbody></table></div><p><a href="lsb_campaign_summary.json">JSON</a> · <a href="lsb_campaign_summary.csv">CSV</a></p></body></html>"""
     (root / "lsb_campaign_report.html").write_text(document, encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False))
     return 0

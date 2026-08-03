@@ -134,18 +134,19 @@ def main() -> int:
     status = "FAILED" if failure else "READY" if ready else "COMPLETE" if complete else "INCOMPLETE"
     status_class = "bad" if failure else "good" if status in {"READY", "COMPLETE"} else "warn"
     final = next((item for item in stages if item["name"] == "conditioned"), {})
-    health = complete.get("health", {}) if isinstance(complete.get("health"), dict) else {}
-    clipping = complete.get("active_clipping", {}) if isinstance(complete.get("active_clipping"), dict) else {}
-    shadow = complete.get("shadow", {}) if isinstance(complete.get("shadow"), dict) else {}
-    conditioner = complete.get("conditioner", {}) if isinstance(complete.get("conditioner"), dict) else {}
+    terminal = failure or complete
+    health = terminal.get("health", {}) if isinstance(terminal.get("health"), dict) else {}
+    clipping = terminal.get("active_clipping", {}) if isinstance(terminal.get("active_clipping"), dict) else {}
+    shadow = terminal.get("shadow", {}) if isinstance(terminal.get("shadow"), dict) else {}
+    conditioner = terminal.get("conditioner", {}) if isinstance(terminal.get("conditioner"), dict) else {}
 
     sample_mode = str(config.get("sample_mode", "xor"))
     lsb_bits = int(config.get("lsb_bits", 1) or 1)
     sample_name = {"xor": "Temporal XOR", "direct": "Direct Y", "delta": "Temporal delta"}.get(sample_mode, sample_mode)
     pipeline_label = (
-        f"{sample_name} / {lsb_bits} LSB → mask → health → SHA3-512"
+        f"{sample_name} / {lsb_bits} LSB → mask → symbol RCT/APT → SHA3-512"
         if config.get("von_neumann_stage") is False
-        else f"{sample_name} / {lsb_bits} LSB → mask → VN + SHA3-512"
+        else f"{sample_name} / {lsb_bits} LSB → mask → symbol RCT/APT → VN + SHA3-512"
     )
     cards = [
         metric_card("Status", status, complete.get("app_version") or failure.get("app_version") or "", status_class),
@@ -153,7 +154,12 @@ def main() -> int:
         metric_card("Finalne P(1)", fmt(final.get("p1"), 8), f"odchylenie {fmt(abs(float(final['p1'])-.5) if isinstance(final.get('p1'), (int,float)) else None, 7)}"),
         metric_card("Finalne |φ| lag-1", fmt(abs(float(final["lag1_phi"])) if isinstance(final.get("lag1_phi"), (int, float)) else None, 8)),
         metric_card("Hmin bajtu SHA3", fmt(final.get("hmin"), 8), f"χ² p={fmt(final.get('chi_p'), 7)}"),
-        metric_card("RCT / APT", f"{health.get('rct_failures', 0)} / {health.get('apt_failures', 0)}", "failures", "bad" if health.get("latched") else "good"),
+        metric_card(
+            "RCT / APT",
+            f"{health.get('rct_failures', 0)} / {health.get('apt_failures', 0)}",
+            f"{health.get('sample_width_bits', lsb_bits)}-bit symbols · Hmin={fmt(health.get('assessed_min_entropy_bits_per_symbol'), 5)}",
+            "bad" if health.get("latched") else "good",
+        ),
         metric_card("Clipping", "LATCH" if clipping.get("latched") else "OK", f"failures {clipping.get('failures', 0)}", "bad" if clipping.get("latched") else "good"),
         metric_card("Mask retention", fmt(shadow.get("active_retention"), 7), f"Jaccard {fmt(shadow.get('jaccard'), 7)}"),
         metric_card("SHA3 output", fmt_bytes(conditioner.get("written_bytes")), f"{fmt(conditioner.get('compression_ratio'), 5)}:1 compression"),
@@ -293,10 +299,20 @@ def main() -> int:
         + '<section><h2>Najważniejsze metryki</h2>' + stage_table + '</section>'
         + binary_geometry_section(run, geometry)
         + lsb_section
+        + (
+            '<section><h2>Przyczyna zatrzymania</h2><p class="bad"><code>'
+            + esc(failure.get("reason", "nieznany błąd"))
+            + '</code></p><p>Stan: <code>' + esc(failure.get("state", "UNKNOWN"))
+            + '</code> · <a href="run_failed.json">run_failed.json</a> · '
+            + '<a href="health_events.csv">health_events.csv</a></p></section>'
+            if failure else ''
+        )
         + '<details><summary>Konfiguracja przebiegu</summary>' + table_html(["Parametr", "Wartość"], config_rows, compact=True) + '</details>'
         + (f'<details><summary>Pliki wynikowe i sumy SHA-256</summary>{file_table}</details>' if file_table else "")
         + f'<section><h2>Szczegółowe analizy</h2><p>{dual_link} {geometry_link} {lsb_link}</p><ul>{analysis_links}</ul></section>'
-        + '<section><h2>Metadane</h2><p><a href="runner_summary.json">runner_summary.json</a> · <a href="output_complete.json">output_complete.json</a> · <a href="READY.json">READY.json</a> · <a href="console.log">console.log</a></p></section>'
+        + '<section><h2>Metadane</h2><p><a href="runner_summary.json">runner_summary.json</a> · '
+        + ('<a href="run_failed.json">run_failed.json</a> · ' if failure else '<a href="output_complete.json">output_complete.json</a> · <a href="READY.json">READY.json</a> · ')
+        + '<a href="console.log">console.log</a></p></section>'
     )
     navigation = '<a href="../">Katalog nadrzędny</a>' + dual_link + geometry_link + lsb_link
     document = html_page(
