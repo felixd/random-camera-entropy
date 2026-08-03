@@ -1,3 +1,14 @@
+## 7.11.0 — 2026-08-03
+
+- ograniczono wszystkie aktywne profile i walidację do maksymalnie 4 LSB;
+- kampania LSB wykonuje 12 profili `xor/direct/delta × 1..4` i generuje schemat podsumowania v4;
+- dodano wykresy dla danych porównawczych z tabel oraz wspólny przełącznik jednostek `bit/s`, `kbit/s`, `kB/s`, `MiB/s`, `MB/s`; domyślne jest `kB/s`;
+- dodano profil `production-assessment` z poziomami `quick`, `full` i `exhaustive`;
+- kompleksowa macierz obejmuje tryby/szerokości LSB, pairing i lagi, geometrię przestrzenną, entropy credit, sweep SHA3, dual weave i powtarzalność;
+- `production_assessment_report.html` jest pojedynczym, samodzielnym plikiem z osadzonym Plotly, pełnym JSON i dokładnymi parametrami każdego testu;
+- panel WWW pozwala wybrać poziom kompleksowej oceny;
+- dodano testy regresyjne macierzy przypadków, raportu standalone i ograniczenia 1..4 LSB.
+
 ## 7.10.0 — 2026-08-03
 
 - przeniesiono RCT/APT profili wielobitowych ze zserializowanego bitstreamu na źródłowe symbole k-bitowe;

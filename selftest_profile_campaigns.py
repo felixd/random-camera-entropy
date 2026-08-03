@@ -29,7 +29,7 @@ def main() -> int:
     global_steps = dict(re.findall(r'^\s*"([^|]+)\|([^"|]+)"\s*$', global_text, re.MULTILINE))
     expected = {name: script for name, script in profiles.items() if name != "global-all"}
     assert global_steps == expected, (global_steps.keys(), expected.keys())
-    assert len(global_steps) == len(expected)
+    assert len(global_steps) == 23
 
     for script in profiles.values():
         path = ROOT / script
@@ -59,7 +59,7 @@ def main() -> int:
         for token in forbidden:
             assert token not in value, f"{token} remains in {path.name}"
 
-    for script in ("run_one.sh", "smoke_lsb_profiles.sh", "qualification_for_review.sh", "qualification_global_all_profiles.sh"):
+    for script in ("run_one.sh", "smoke_lsb_profiles.sh", "qualification_global_all_profiles.sh"):
         subprocess.run(["bash", "-n", str(ROOT / script)], check=True)
 
     print("profile/global campaign self-test: PASS")

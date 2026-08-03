@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 REPORT_NAMES = (
+    "production_assessment_report.html",
     "global_campaign_report.html",
     "lsb_campaign_report.html",
     "qualification_report.html",

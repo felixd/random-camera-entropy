@@ -2,23 +2,38 @@
 # -*- coding: utf-8 -*-
 """Build the comparison report for the exhaustive 1..4 LSB campaign.
 
-Throughput fields come from the terminal worker report.  Empirical entropy-rate
-fields are diagnostics calculated from one dataset; they are not SP 800-90B
-entropy claims.  Credited entropy rate uses the externally supplied
-``ENTROPY_CREDIT_BITS_PER_PIXEL`` budget.
+The report keeps every production-relevant number in ordinary HTML tables and
+in an embedded JSON bundle. Plotly charts are an additional comparison layer.
+Throughput is stored internally as bit/s and can be displayed as bit/s, kbit/s,
+kB/s, MiB/s or MB/s; kB/s is the default.
 """
 from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
-import html
 import json
 import math
 import sys
 from pathlib import Path
 from typing import Any
 
+from report_ui import (
+    RawHtml,
+    chart_div,
+    esc,
+    fmt,
+    fmt_rate,
+    fmt_percent,
+    html_page,
+    metric_card,
+    metrics_grid,
+    rate_span,
+    rate_unit_selector,
+    table_html,
+)
+
 APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.11.0"
+MAX_LSB_BITS = 4
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -46,9 +61,7 @@ def nested(record: dict[str, Any], *keys: str) -> Any:
     return current
 
 
-
 def select_rate(record: dict[str, Any], *paths: tuple[str, ...]) -> tuple[float | None, str]:
-    """Select the first positive rate and report its measurement basis."""
     for path in paths:
         value = finite_number(nested(record, *path))
         if value is not None and value > 0.0:
@@ -56,24 +69,41 @@ def select_rate(record: dict[str, Any], *paths: tuple[str, ...]) -> tuple[float 
     return None, ""
 
 
+def relevant_parameters(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "source_type", "dataset_dir", "dataset_start_frame", "dataset_max_frames",
+        "sample_mode", "lsb_bits", "entropy_credit_bits_per_pixel",
+        "pairing_mode", "pair_lag_frames", "spatial_mask_pattern", "spatial_sampling",
+        "spatial_step_x", "spatial_step_y", "spatial_phase_x", "spatial_phase_y",
+        "spatial_block_width", "spatial_block_height", "temporal_spatial_offset_x",
+        "temporal_spatial_offset_y", "serialization_order", "serialization_tile_width",
+        "serialization_tile_height", "conditioner", "conditioner_input_bits",
+        "minimum_conditioner_input_bits", "conditioned_output_bytes",
+        "validation_output_bytes", "calibration_pairs", "thermal_warmup_seconds",
+        "assessed_min_entropy", "apt_window", "health_alpha", "von_neumann_stage",
+    )
+    result: dict[str, Any] = {}
+    for key in keys:
+        if key in config:
+            result[key] = config[key]
+    for key in (
+        "sample_mode", "lsb_bits", "entropy_credit_bits_per_pixel",
+        "minimum_conditioner_input_bits", "conditioner_input_bits",
+    ):
+        if key in state:
+            result[key] = state[key]
+    return result
+
+
 def profile_rows(root: Path) -> list[dict[str, Any]]:
     state_dir = root / "lsb_profiles"
     state_files = sorted(state_dir.glob("*.json")) if state_dir.is_dir() else []
-    rows: list[dict[str, Any]] = []
-
     if state_files:
-        sources: list[tuple[str, dict[str, Any]]] = []
-        for path in state_files:
-            state = read_json(path)
-            sources.append((str(state.get("profile") or path.stem), state))
+        sources = [(str((state := read_json(path)).get("profile") or path.stem), state) for path in state_files]
     else:
-        # Compatibility with campaigns created before explicit profile-state files.
-        sources = [
-            (path.name, {})
-            for path in sorted(root.iterdir())
-            if path.is_dir() and path.name != "lsb_profiles"
-        ]
+        sources = [(path.name, {}) for path in sorted(root.iterdir()) if path.is_dir() and path.name != "lsb_profiles"]
 
+    rows: list[dict[str, Any]] = []
     for profile, state_record in sources:
         run = root / profile
         config = read_json(run / "runner_config.json")
@@ -83,300 +113,211 @@ def profile_rows(root: Path) -> list[dict[str, Any]]:
         terminal = complete_report or failed_report
         analysis = read_json(run / "analysis_conditioned" / "summary.json")
         bitplanes = read_json(run / "lsb_bitplane_summary.json")
-
-        # Files written by the worker are authoritative.  Profile state can be
-        # stale if the shell was interrupted between worker exit and state update.
-        status = (
-            "failed"
-            if failed_report
-            else (
-                "complete"
-                if complete_report
-                else str(state_record.get("status") or "unknown")
-            )
-        )
-
+        status = "failed" if failed_report else "complete" if complete_report else str(state_record.get("status") or "unknown")
         lsb_bits = int(state_record.get("lsb_bits", config.get("lsb_bits", 1)) or 1)
-        credit = finite_number(
-            state_record.get(
-                "entropy_credit_bits_per_pixel",
-                config.get("entropy_credit_bits_per_pixel"),
-            )
-        )
-        masked_bps, masked_rate_basis = select_rate(
-            terminal,
-            ("rates", "masked_bps_lifetime"),
-            ("rates", "masked_bps_10s"),
-            ("rates", "masked_bps_current"),
-        )
-        raw_bps, raw_rate_basis = select_rate(
-            terminal,
-            ("rates", "raw_change_bps_lifetime"),
-            ("rates", "raw_change_bps_10s"),
-            ("rates", "raw_change_bps_current"),
-        )
-        pixel_symbols_per_second = (
-            masked_bps / lsb_bits
-            if masked_bps is not None and masked_bps >= 0.0 and lsb_bits > 0
-            else None
-        )
+        credit = finite_number(state_record.get("entropy_credit_bits_per_pixel", config.get("entropy_credit_bits_per_pixel")))
+        masked_bps, masked_basis = select_rate(terminal, ("rates", "masked_bps_lifetime"), ("rates", "masked_bps_10s"), ("rates", "masked_bps_current"))
+        raw_bps, raw_basis = select_rate(terminal, ("rates", "raw_change_bps_lifetime"), ("rates", "raw_change_bps_10s"), ("rates", "raw_change_bps_current"))
+        symbols_bps = masked_bps / lsb_bits if masked_bps is not None and lsb_bits > 0 else None
         symbol_hmin = finite_number(bitplanes.get("symbol_min_entropy_bits_per_symbol"))
-        empirical_hmin_bps = (
-            pixel_symbols_per_second * symbol_hmin
-            if pixel_symbols_per_second is not None and symbol_hmin is not None
-            else None
-        )
-        credited_entropy_bps = (
-            pixel_symbols_per_second * credit
-            if pixel_symbols_per_second is not None and credit is not None
-            else None
-        )
-        conditioned_output_bps = finite_number(
-            nested(terminal, "conditioner", "output_bps_until_complete")
-        )
-        credit_utilization = (
-            conditioned_output_bps / credited_entropy_bps
-            if conditioned_output_bps is not None
-            and credited_entropy_bps is not None
-            and credited_entropy_bps > 0.0
-            else None
-        )
+        empirical_hmin_bps = symbols_bps * symbol_hmin if symbols_bps is not None and symbol_hmin is not None else None
+        credited_bps = symbols_bps * credit if symbols_bps is not None and credit is not None else None
+        conditioned_bps = finite_number(nested(terminal, "conditioner", "output_bps_until_complete"))
+        utilization = conditioned_bps / credited_bps if conditioned_bps is not None and credited_bps and credited_bps > 0 else None
         health = terminal.get("health", {}) if isinstance(terminal.get("health"), dict) else {}
-        failure_reason = str(failed_report.get("reason") or "")
+        parameters = relevant_parameters(config, state_record)
+        rows.append({
+            "profile": profile,
+            "status": status,
+            "exit_code": state_record.get("exit_code"),
+            "sample_mode": state_record.get("sample_mode", config.get("sample_mode")),
+            "lsb_bits": lsb_bits,
+            "entropy_credit_bits_per_pixel": credit,
+            "minimum_conditioner_input_bits": state_record.get("minimum_conditioner_input_bits", config.get("minimum_conditioner_input_bits")),
+            "conditioner_input_bits": state_record.get("conditioner_input_bits", config.get("conditioner_input_bits")),
+            "active_pixels": terminal.get("active_pixels"),
+            "raw_input_bps": raw_bps,
+            "masked_input_bps": masked_bps,
+            "raw_rate_basis": raw_basis,
+            "masked_rate_basis": masked_basis,
+            "pixel_symbols_per_second": symbols_bps,
+            "credited_entropy_bps": credited_bps,
+            "empirical_symbol_hmin_bps": empirical_hmin_bps,
+            "conditioned_output_bps": conditioned_bps,
+            "conditioned_vs_credited_entropy": utilization,
+            "time_to_target_seconds": finite_number(nested(terminal, "conditioner", "time_to_target_seconds")),
+            "conditioned_written_bytes": nested(terminal, "conditioner", "written_bytes"),
+            "conditioned_input_bits_consumed": nested(terminal, "conditioner", "input_bits_consumed"),
+            "conditioned_total_bytes": analysis.get("total_bytes"),
+            "conditioned_byte_min_entropy": analysis.get("byte_min_entropy_bits_per_byte"),
+            "conditioned_p1": analysis.get("p1"),
+            "conditioned_lag1": nested(analysis, "lag1", "phi"),
+            "conditioned_chi_square_p_value": analysis.get("byte_chi_square_p_value"),
+            "symbol_min_entropy_bits_per_symbol": symbol_hmin,
+            "symbol_min_entropy_bits_per_input_bit": bitplanes.get("symbol_min_entropy_bits_per_input_bit"),
+            "max_abs_cross_plane_phi": bitplanes.get("max_abs_cross_plane_phi"),
+            "max_cross_plane_mutual_information_bits": bitplanes.get("max_cross_plane_mutual_information_bits"),
+            "state": terminal.get("state") or terminal.get("status") or result.get("status"),
+            "failure_reason": str(failed_report.get("reason") or ""),
+            "health_sample_domain": health.get("sample_domain"),
+            "health_sample_width_bits": health.get("sample_width_bits"),
+            "health_rct_failures": health.get("rct_failures"),
+            "health_apt_failures": health.get("apt_failures"),
+            "health_rct_cutoff": health.get("rct_cutoff"),
+            "health_apt_cutoff": health.get("apt_cutoff"),
+            "parameters": parameters,
+            "bitplane_report": f"{profile}/lsb_bitplane_report.html" if (run / "lsb_bitplane_report.html").exists() else "",
+            "profile_log": f"{profile}.profile.log" if (root / f"{profile}.profile.log").exists() else "",
+            "failure_json": f"{profile}/run_failed.json" if failed_report else "",
+            "report": f"{profile}/run_report.html" if (run / "run_report.html").exists() else "",
+        })
 
-        rows.append(
-            {
-                "profile": profile,
-                "status": status,
-                "exit_code": state_record.get("exit_code"),
-                "sample_mode": state_record.get("sample_mode", config.get("sample_mode")),
-                "lsb_bits": lsb_bits,
-                "entropy_credit_bits_per_pixel": credit,
-                "minimum_conditioner_input_bits": state_record.get(
-                    "minimum_conditioner_input_bits",
-                    config.get("minimum_conditioner_input_bits"),
-                ),
-                "conditioner_input_bits": state_record.get(
-                    "conditioner_input_bits",
-                    config.get("conditioner_input_bits"),
-                ),
-                "active_pixels": terminal.get("active_pixels"),
-                "raw_input_bps": raw_bps,
-                "masked_input_bps": masked_bps,
-                "raw_rate_basis": raw_rate_basis,
-                "masked_rate_basis": masked_rate_basis,
-                # Compatibility aliases for consumers of campaign schema v2.
-                "raw_input_bps_10s": raw_bps,
-                "masked_input_bps_10s": masked_bps,
-                "pixel_symbols_per_second": pixel_symbols_per_second,
-                "credited_entropy_bps": credited_entropy_bps,
-                "empirical_symbol_hmin_bps": empirical_hmin_bps,
-                "conditioned_output_bps": conditioned_output_bps,
-                "conditioned_vs_credited_entropy": credit_utilization,
-                "time_to_target_seconds": finite_number(
-                    nested(terminal, "conditioner", "time_to_target_seconds")
-                ),
-                "conditioned_written_bytes": nested(terminal, "conditioner", "written_bytes"),
-                "conditioned_input_bits_consumed": nested(
-                    terminal, "conditioner", "input_bits_consumed"
-                ),
-                "conditioned_total_bytes": analysis.get("total_bytes"),
-                "conditioned_byte_min_entropy": analysis.get(
-                    "byte_min_entropy_bits_per_byte"
-                ),
-                "conditioned_p1": analysis.get("p1"),
-                "conditioned_lag1": analysis.get("lag1"),
-                "symbol_min_entropy_bits_per_symbol": symbol_hmin,
-                "symbol_min_entropy_bits_per_input_bit": bitplanes.get(
-                    "symbol_min_entropy_bits_per_input_bit"
-                ),
-                "max_abs_cross_plane_phi": bitplanes.get("max_abs_cross_plane_phi"),
-                "max_cross_plane_mutual_information_bits": bitplanes.get(
-                    "max_cross_plane_mutual_information_bits"
-                ),
-                "bitplane_report": (
-                    f"{profile}/lsb_bitplane_report.html"
-                    if (run / "lsb_bitplane_report.html").exists()
-                    else ""
-                ),
-                "state": terminal.get("state") or terminal.get("status") or result.get("status"),
-                "failure_reason": failure_reason,
-                "health_sample_domain": health.get("sample_domain"),
-                "health_sample_width_bits": health.get("sample_width_bits"),
-                "health_rct_failures": health.get("rct_failures"),
-                "health_apt_failures": health.get("apt_failures"),
-                "health_rct_cutoff": health.get("rct_cutoff"),
-                "health_apt_cutoff": health.get("apt_cutoff"),
-                "profile_log": f"{profile}.profile.log" if (root / f"{profile}.profile.log").exists() else "",
-                "failure_json": f"{profile}/run_failed.json" if failed_report else "",
-                "report": (
-                    f"{profile}/run_report.html"
-                    if (run / "run_report.html").exists()
-                    else ""
-                ),
-            }
-        )
-
-    baseline = next(
-        (
-            row
-            for row in rows
-            if row.get("sample_mode") == "xor" and row.get("lsb_bits") == 1
-        ),
-        None,
-    )
+    baseline = next((row for row in rows if row.get("sample_mode") == "xor" and row.get("lsb_bits") == 1), None)
     baseline_masked = finite_number(baseline.get("masked_input_bps")) if baseline else None
     baseline_conditioned = finite_number(baseline.get("conditioned_output_bps")) if baseline else None
     for row in rows:
-        masked = finite_number(row.get("masked_input_bps"))
-        conditioned = finite_number(row.get("conditioned_output_bps"))
-        row["masked_throughput_vs_xor_lsb1"] = (
-            masked / baseline_masked
-            if masked is not None and baseline_masked and baseline_masked > 0.0
-            else None
-        )
-        row["conditioned_throughput_vs_xor_lsb1"] = (
-            conditioned / baseline_conditioned
-            if conditioned is not None and baseline_conditioned and baseline_conditioned > 0.0
-            else None
-        )
+        masked = finite_number(row.get("masked_input_bps")); conditioned = finite_number(row.get("conditioned_output_bps"))
+        row["masked_throughput_vs_xor_lsb1"] = masked / baseline_masked if masked is not None and baseline_masked else None
+        row["conditioned_throughput_vs_xor_lsb1"] = conditioned / baseline_conditioned if conditioned is not None and baseline_conditioned else None
     return rows
 
 
-def format_cell(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return f"{value:.9g}"
-    return str(value)
+def link_cell(row: dict[str, Any]) -> RawHtml:
+    parts: list[str] = []
+    for key, label in (("report", "raport"), ("bitplane_report", "LSB"), ("failure_json", "błąd"), ("profile_log", "log")):
+        if row.get(key):
+            parts.append(f'<a href="{esc(row[key])}">{label}</a>')
+    return RawHtml(" · ".join(parts) if parts else "—")
 
 
 def main() -> int:
     root = Path(sys.argv[1]).resolve()
+    campaign_config = read_json(root / "lsb_campaign_config.json")
     rows = profile_rows(root)
     complete = sum(row["status"] == "complete" for row in rows)
     failed = sum(row["status"] == "failed" for row in rows)
     incomplete = len(rows) - complete - failed
     summary = {
-        "schema": "camera-entropy-lsb-campaign-v3",
+        "schema": "camera-entropy-lsb-campaign-v4",
         "app_version": APP_VERSION,
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "campaign": root.name,
-        "total_profiles": len(rows),
-        "profiles": rows,
-        "complete": complete,
-        "failed": failed,
-        "incomplete": incomplete,
-        "warning": (
-            "Empirical entropy-rate values are single-dataset diagnostics, not an "
-            "SP 800-90B min-entropy claim. Credited entropy rate is based on the "
-            "externally supplied entropy-credit budget."
-        ),
+        "configuration": campaign_config,
+        "max_lsb_bits": MAX_LSB_BITS,
+        "default_rate_unit": "kB/s",
+        "rate_units": ["bit/s", "kbit/s", "kB/s", "MiB/s", "MB/s"],
+        "total_profiles": len(rows), "profiles": rows,
+        "complete": complete, "failed": failed, "incomplete": incomplete,
+        "warning": "Empirical entropy-rate values are single-dataset diagnostics, not an SP 800-90B min-entropy claim. Credited entropy rate is an externally supplied budget.",
     }
-    (root / "lsb_campaign_summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    (root / "lsb_campaign_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    fieldnames = [
-        "profile",
-        "status",
-        "exit_code",
-        "sample_mode",
-        "lsb_bits",
-        "entropy_credit_bits_per_pixel",
-        "minimum_conditioner_input_bits",
-        "conditioner_input_bits",
-        "active_pixels",
-        "raw_input_bps",
-        "masked_input_bps",
-        "raw_rate_basis",
-        "masked_rate_basis",
-        "raw_input_bps_10s",
-        "masked_input_bps_10s",
-        "pixel_symbols_per_second",
-        "credited_entropy_bps",
-        "empirical_symbol_hmin_bps",
-        "conditioned_output_bps",
-        "conditioned_vs_credited_entropy",
-        "time_to_target_seconds",
-        "masked_throughput_vs_xor_lsb1",
-        "conditioned_throughput_vs_xor_lsb1",
-        "conditioned_written_bytes",
-        "conditioned_input_bits_consumed",
-        "conditioned_total_bytes",
-        "conditioned_byte_min_entropy",
-        "conditioned_p1",
-        "conditioned_lag1",
-        "symbol_min_entropy_bits_per_symbol",
-        "symbol_min_entropy_bits_per_input_bit",
-        "max_abs_cross_plane_phi",
-        "max_cross_plane_mutual_information_bits",
-        "bitplane_report",
-        "state",
-        "failure_reason",
-        "health_sample_domain",
-        "health_sample_width_bits",
-        "health_rct_failures",
-        "health_apt_failures",
-        "health_rct_cutoff",
-        "health_apt_cutoff",
-        "profile_log",
-        "failure_json",
-        "report",
+    scalar_fields = [key for key in rows[0].keys() if key != "parameters"] if rows else ["profile"]
+    with (root / "lsb_campaign_summary.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=scalar_fields + ["parameters_json"], extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "parameters_json": json.dumps(row.get("parameters", {}), ensure_ascii=False, sort_keys=True)})
+
+    labels = [str(row["profile"]) for row in rows]
+    plot_specs = [
+        {
+            "id": "rates-all",
+            "rateAxis": "y", "rateTitle": "Przepustowość",
+            "data": [
+                {"type": "bar", "name": "Wejście maskowane", "x": labels, "y": [row.get("masked_input_bps") for row in rows]},
+                {"type": "bar", "name": "Credited entropy", "x": labels, "y": [row.get("credited_entropy_bps") for row in rows]},
+                {"type": "bar", "name": "Empiryczne Hmin", "x": labels, "y": [row.get("empirical_symbol_hmin_bps") for row in rows]},
+                {"type": "bar", "name": "SHA3-512", "x": labels, "y": [row.get("conditioned_output_bps") for row in rows]},
+            ],
+            "layout": {"barmode": "group", "xaxis": {"title": "Profil", "tickangle": -30}, "yaxis": {"rangemode": "tozero"}},
+        },
+        {
+            "id": "hmin",
+            "data": [
+                {"type": "bar", "name": "Hmin / symbol", "x": labels, "y": [row.get("symbol_min_entropy_bits_per_symbol") for row in rows]},
+                {"type": "bar", "name": "Hmin / pobrany bit", "x": labels, "y": [row.get("symbol_min_entropy_bits_per_input_bit") for row in rows]},
+            ],
+            "layout": {"barmode": "group", "xaxis": {"title": "Profil", "tickangle": -30}, "yaxis": {"title": "bit", "rangemode": "tozero"}},
+        },
+        {
+            "id": "dependencies",
+            "data": [
+                {"type": "bar", "name": "max |φ| między płaszczyznami", "x": labels, "y": [row.get("max_abs_cross_plane_phi") for row in rows]},
+                {"type": "bar", "name": "max MI [bit]", "x": labels, "y": [row.get("max_cross_plane_mutual_information_bits") for row in rows]},
+            ],
+            "layout": {"barmode": "group", "xaxis": {"title": "Profil", "tickangle": -30}, "yaxis": {"title": "zależność", "rangemode": "tozero"}},
+        },
+        {
+            "id": "output-quality",
+            "data": [
+                {"type": "scatter", "mode": "lines+markers", "name": "|P(1)-0.5|", "x": labels, "y": [abs(float(row["conditioned_p1"]) - .5) if finite_number(row.get("conditioned_p1")) is not None else None for row in rows]},
+                {"type": "scatter", "mode": "lines+markers", "name": "|φ lag-1|", "x": labels, "y": [abs(float(row["conditioned_lag1"])) if finite_number(row.get("conditioned_lag1")) is not None else None for row in rows]},
+            ],
+            "layout": {"xaxis": {"title": "Profil", "tickangle": -30}, "yaxis": {"title": "odchylenie bezwzględne", "rangemode": "tozero"}},
+        },
+        {
+            "id": "time-and-utilization",
+            "data": [
+                {"type": "bar", "name": "Czas do celu [s]", "x": labels, "y": [row.get("time_to_target_seconds") for row in rows]},
+                {"type": "bar", "name": "SHA3 / credited", "x": labels, "y": [row.get("conditioned_vs_credited_entropy") for row in rows], "yaxis": "y2"},
+            ],
+            "layout": {"barmode": "group", "xaxis": {"title": "Profil", "tickangle": -30}, "yaxis": {"title": "sekundy", "rangemode": "tozero"}, "yaxis2": {"title": "udział", "overlaying": "y", "side": "right", "rangemode": "tozero"}},
+        },
     ]
-    if rows:
-        with (root / "lsb_campaign_summary.csv").open(
-            "w", newline="", encoding="utf-8"
-        ) as stream:
-            writer = csv.DictWriter(stream, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
 
-    table_keys = (
-        "profile",
-        "status",
-        "failure_reason",
-        "sample_mode",
-        "lsb_bits",
-        "entropy_credit_bits_per_pixel",
-        "masked_input_bps",
-        "masked_rate_basis",
-        "pixel_symbols_per_second",
-        "credited_entropy_bps",
-        "empirical_symbol_hmin_bps",
-        "conditioned_output_bps",
-        "conditioned_vs_credited_entropy",
-        "time_to_target_seconds",
-        "masked_throughput_vs_xor_lsb1",
-        "conditioned_throughput_vs_xor_lsb1",
-        "symbol_min_entropy_bits_per_symbol",
-        "symbol_min_entropy_bits_per_input_bit",
-        "max_abs_cross_plane_phi",
-        "max_cross_plane_mutual_information_bits",
+    best_hmin = max((row for row in rows if finite_number(row.get("symbol_min_entropy_bits_per_input_bit")) is not None), key=lambda row: float(row["symbol_min_entropy_bits_per_input_bit"]), default=None)
+    fastest = max((row for row in rows if finite_number(row.get("conditioned_output_bps")) is not None), key=lambda row: float(row["conditioned_output_bps"]), default=None)
+    cards = [
+        metric_card("Profile", len(rows), f"complete {complete} · failed {failed} · incomplete {incomplete}", "good" if failed == 0 and incomplete == 0 else "warn"),
+        metric_card("Zakres LSB", "1–4", "pełna macierz direct / xor / delta"),
+        metric_card("Najwyższe Hmin / bit", best_hmin.get("profile") if best_hmin else "—", fmt(best_hmin.get("symbol_min_entropy_bits_per_input_bit"), 7) if best_hmin else "—"),
+        metric_card("Najszybszy SHA3", fastest.get("profile") if fastest else "—", rate_span(fastest.get("conditioned_output_bps")) if fastest else "—"),
+    ]
+
+    main_table = table_html(
+        ["Profil", "Status", "Tryb", "LSB", "Credit/pixel", "Masked", "Credited", "Empiryczne Hmin", "SHA3", "Hmin/symbol", "Hmin/bit", "max |φ|", "max MI", "Czas [s]", "Health", "Linki"],
+        [[
+            row["profile"], row["status"], row.get("sample_mode"), row.get("lsb_bits"), fmt(row.get("entropy_credit_bits_per_pixel"), 6),
+            rate_span(row.get("masked_input_bps")), rate_span(row.get("credited_entropy_bps")), rate_span(row.get("empirical_symbol_hmin_bps")), rate_span(row.get("conditioned_output_bps")),
+            fmt(row.get("symbol_min_entropy_bits_per_symbol"), 7), fmt(row.get("symbol_min_entropy_bits_per_input_bit"), 7), fmt(row.get("max_abs_cross_plane_phi"), 7), fmt(row.get("max_cross_plane_mutual_information_bits"), 7), fmt(row.get("time_to_target_seconds"), 6),
+            f"RCT {row.get('health_rct_failures') or 0} / APT {row.get('health_apt_failures') or 0}", link_cell(row),
+        ] for row in rows], compact=True,
     )
-    table = "".join(
-        "<tr>"
-        + "".join(
-            f"<td>{html.escape(format_cell(row.get(key)))}</td>" for key in table_keys
-        )
-        + (
-            f'<td><a href="{html.escape(str(row["bitplane_report"]))}">LSB</a></td>'
-            if row["bitplane_report"]
-            else "<td>—</td>"
-        )
-        + (
-            '<td>'
-            + (f'<a href="{html.escape(str(row["report"]))}">raport</a> ' if row["report"] else '')
-            + (f'<a href="{html.escape(str(row["failure_json"]))}">błąd</a> ' if row["failure_json"] else '')
-            + (f'<a href="{html.escape(str(row["profile_log"]))}">log</a>' if row["profile_log"] else '')
-            + ('—' if not row["report"] and not row["failure_json"] and not row["profile_log"] else '')
-            + '</td>'
-        )
-        + "</tr>"
+
+    parameter_sections = "".join(
+        '<details><summary>' + esc(row["profile"]) + ' — dokładne parametry</summary>'
+        + table_html(["Parametr", "Wartość"], [[key, json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value] for key, value in sorted(row.get("parameters", {}).items())], compact=True)
+        + (f'<p class="callout bad"><strong>Błąd:</strong> {esc(row["failure_reason"])}</p>' if row.get("failure_reason") else "")
+        + '</details>'
         for row in rows
     )
-    document = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kampania LSB</title><style>:root{{color-scheme:dark;--bg:#0b0f14;--panel:#131a22;--border:#2a3441;--text:#edf4fb;--muted:#94a3b5;--accent:#55b5ff;--warn:#f8d477}}*{{box-sizing:border-box}}body{{font-family:system-ui;background:var(--bg);color:var(--text);margin:0;padding:24px}}a{{color:var(--accent)}}table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}}.card{{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto}}.warn{{color:var(--warn)}}.muted{{color:var(--muted)}}td:nth-child(3){{white-space:normal;min-width:24rem}}</style></head><body><h1>Kampania LSB</h1><p>{html.escape(root.name)} · profile {len(rows)} · complete {complete} · failed {failed} · incomplete {incomplete}</p><p class="warn">Empiryczna przepustowość Hmin jest diagnostyką pojedynczego zbioru, a nie deklaracją SP 800-90B. „Credited entropy” wykorzystuje podany zewnętrznie budżet entropy credit.</p><p class="muted">Przepustowości względne są liczone względem profilu xor/1 LSB. Do porównań używane są przepustowości lifetime z tego samego okresu produkcyjnego. RCT/APT działa na k-bitowych symbolach pikseli; dopiero wejście conditionera jest serializowane pixel-major-lsb-first.</p><div class="card"><table><thead><tr><th>Profil</th><th>Status</th><th>Failure reason</th><th>Tryb</th><th>LSB</th><th>Credit/pixel</th><th>Masked bit/s</th><th>Rate basis</th><th>Pixel symbols/s</th><th>Credited entropy bit/s</th><th>Empirical Hmin bit/s</th><th>SHA3 bit/s</th><th>SHA3 / credited</th><th>Time to target [s]</th><th>Masked × baseline</th><th>SHA3 × baseline</th><th>Hmin symbol</th><th>Hmin/input bit</th><th>max |phi|</th><th>max MI</th><th>LSB</th><th>Raport</th></tr></thead><tbody>{table}</tbody></table></div><p><a href="lsb_campaign_summary.json">JSON</a> · <a href="lsb_campaign_summary.csv">CSV</a></p></body></html>"""
+
+    campaign_config_table = table_html(
+        ["Parametr kampanii", "Wartość"],
+        [[key, json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value] for key, value in sorted(campaign_config.items())],
+        compact=True,
+    ) if campaign_config else "<p>Brak osobnego pliku konfiguracji kampanii; parametry są dostępne przy każdym profilu.</p>"
+
+    body = (
+        '<div class="callout warn"><strong>Zakres:</strong> raport porównuje wszystkie tryby próbkowania dla 1–4 LSB. Empiryczne Hmin nie jest formalną deklaracją SP 800-90B.</div>'
+        + '<section><h2>Konfiguracja kampanii</h2>' + campaign_config_table + '</section>'
+        + metrics_grid(cards)
+        + '<div class="chart-grid">'
+        + chart_div("rates-all", "Przepustowość wszystkich etapów", "Wartości z tabeli na wspólnej skali; jednostkę można zmienić u góry strony.", 440)
+        + chart_div("hmin", "Min-entropia symbolu i pobranego bitu", "Porównanie wartości całego symbolu k-bitowego z efektywnością na wejściowy bit.", 440)
+        + '</div><div class="chart-grid">'
+        + chart_div("dependencies", "Zależności między płaszczyznami bitowymi", "Niższe wartości φ i mutual information są lepsze.", 390)
+        + chart_div("output-quality", "Jakość finalnego SHA3-512", "Odchylenie P(1) oraz korelacja lag-1 po conditionerze.", 390)
+        + '</div>'
+        + chart_div("time-and-utilization", "Czas i wykorzystanie budżetu credited entropy", "Czas osiągnięcia celu i relacja finalnego strumienia do przypisanego budżetu.", 380)
+        + '<section><h2>Pełna tabela porównawcza</h2>' + main_table + '</section>'
+        + '<section><h2>Parametry każdego testu</h2><p class="muted">Każdy profil pokazuje parametry od źródła aż do conditionera.</p>' + parameter_sections + '</section>'
+        + '<section><h2>Dane maszynowe</h2><p>Pełny JSON jest osadzony w tym pliku i dostępny również osobno jako <a href="lsb_campaign_summary.json">lsb_campaign_summary.json</a>.</p></section>'
+        + '<script type="application/json" id="lsb-campaign-data">' + json.dumps(summary, ensure_ascii=False).replace("</", "<\\/") + '</script>'
+    )
+    navigation = rate_unit_selector() + '<a href="lsb_campaign_summary.json">JSON</a><a href="lsb_campaign_summary.csv">CSV</a>'
+    document = html_page(title="Kampania LSB 1–4", subtitle=f"{root.name} · profile {len(rows)}", navigation=navigation, body=body, plot_specs=plot_specs)
     (root / "lsb_campaign_report.html").write_text(document, encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False))
     return 0

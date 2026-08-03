@@ -10,9 +10,26 @@ from __future__ import annotations
 
 import html
 import json
+from pathlib import Path
 from typing import Any, Iterable
 
+
+RATE_UNITS: dict[str, float] = {
+    "bit/s": 1.0,
+    "kbit/s": 1_000.0,
+    "kB/s": 8_000.0,
+    "MiB/s": 8.0 * 1024.0 * 1024.0,
+    "MB/s": 8_000_000.0,
+}
+DEFAULT_RATE_UNIT = "kB/s"
+
+
+class RawHtml(str):
+    """Explicitly trusted HTML fragment produced by report helpers."""
+
+
 PLOTLY_SRC = "/static/vendor/plotly-3.3.1.min.js"
+PLOTLY_FILE = Path(__file__).resolve().parent / "static" / "vendor" / "plotly-3.3.1.min.js"
 
 
 def esc(value: Any) -> str:
@@ -37,15 +54,41 @@ def fmt_percent(value: Any, digits: int = 3, empty: str = "—") -> str:
     return f"{100.0 * float(value):.{digits}f}%"
 
 
-def fmt_rate(value: Any, empty: str = "—") -> str:
+def fmt_rate(value: Any, empty: str = "—", unit: str = DEFAULT_RATE_UNIT) -> str:
+    """Format a bit-per-second value in an explicitly selected unit.
+
+    Reports default to kB/s so source, conditioner and file throughput can be
+    compared on one familiar byte-oriented scale. Decimal kB/MB and binary MiB
+    are intentionally distinct.
+    """
     if not isinstance(value, (int, float)):
         return empty
-    rate = float(value)
-    if abs(rate) >= 1_000_000:
-        return f"{rate / 1_000_000:.3f} Mbit/s"
-    if abs(rate) >= 1_000:
-        return f"{rate / 1_000:.3f} kbit/s"
-    return f"{rate:.1f} bit/s"
+    factor = RATE_UNITS.get(unit)
+    if factor is None:
+        raise ValueError(f"unsupported rate unit: {unit}")
+    scaled = float(value) / factor
+    decimals = 1 if abs(scaled) >= 1000 else 2 if abs(scaled) >= 100 else 3
+    return f"{scaled:.{decimals}f} {unit}"
+
+
+def rate_span(value: Any, *, empty: str = "—", unit: str = DEFAULT_RATE_UNIT) -> RawHtml:
+    if not isinstance(value, (int, float)):
+        return RawHtml(esc(empty))
+    return RawHtml(
+        f'<span class="rate-value" data-rate-bps="{float(value):.17g}">'
+        f'{esc(fmt_rate(value, empty=empty, unit=unit))}</span>'
+    )
+
+
+def rate_unit_selector(*, selected: str = DEFAULT_RATE_UNIT, label: str = "Jednostka przepustowości") -> str:
+    options = "".join(
+        f'<option value="{esc(unit)}"{" selected" if unit == selected else ""}>{esc(unit)}</option>'
+        for unit in RATE_UNITS
+    )
+    return (
+        '<label class="rate-unit-control">'
+        f'<span>{esc(label)}</span><select class="rate-unit-select">{options}</select></label>'
+    )
 
 
 def fmt_bytes(value: Any, empty: str = "—") -> str:
@@ -59,13 +102,15 @@ def fmt_bytes(value: Any, empty: str = "—") -> str:
     return empty
 
 
-def metric_card(label: str, value: Any, detail: str = "", status: str = "") -> str:
+def metric_card(label: str, value: Any, detail: Any = "", status: str = "") -> str:
     status_class = f" metric-{status}" if status in {"good", "warn", "bad"} else ""
-    detail_html = f'<div class="metric-detail">{esc(detail)}</div>' if detail else ""
+    value_html = str(value) if isinstance(value, RawHtml) else esc(value)
+    detail_value = str(detail) if isinstance(detail, RawHtml) else esc(detail)
+    detail_html = f'<div class="metric-detail">{detail_value}</div>' if detail else ""
     return (
         f'<div class="metric-card{status_class}">'
         f'<div class="metric-label">{esc(label)}</div>'
-        f'<div class="metric-value">{esc(value)}</div>{detail_html}</div>'
+        f'<div class="metric-value">{value_html}</div>{detail_html}</div>'
     )
 
 
@@ -73,11 +118,15 @@ def metrics_grid(cards: Iterable[str]) -> str:
     return '<div class="metrics-grid">' + "".join(cards) + "</div>"
 
 
+def _cell_html(value: Any) -> str:
+    return str(value) if isinstance(value, RawHtml) else esc(value)
+
+
 def table_html(headers: list[str], rows: Iterable[Iterable[Any]], *, compact: bool = False) -> str:
     class_name = "compact" if compact else ""
     head = "".join(f"<th>{esc(item)}</th>" for item in headers)
     body = "".join(
-        "<tr>" + "".join(f"<td>{esc(item)}</td>" for item in row) + "</tr>"
+        "<tr>" + "".join(f"<td>{_cell_html(item)}</td>" for item in row) + "</tr>"
         for row in rows
     )
     return f'<div class="table-scroll"><table class="{class_name}"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
@@ -100,13 +149,32 @@ def _safe_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
-def plotly_script(specs: list[dict[str, Any]]) -> str:
+def plotly_script(specs: list[dict[str, Any]], *, inline_runtime: bool = False) -> str:
     payload = _safe_json(specs)
+    if inline_runtime:
+        try:
+            runtime = PLOTLY_FILE.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(f"cannot embed Plotly runtime: {PLOTLY_FILE}") from exc
+        runtime_tag = f"<script>{runtime}</script>"
+    else:
+        runtime_tag = f'<script src="{PLOTLY_SRC}"></script>'
     return f"""
-<script src="{PLOTLY_SRC}"></script>
+{runtime_tag}
 <script>
 (() => {{
   const specs = {payload};
+  const rateUnits = {{"bit/s":1,"kbit/s":1000,"kB/s":8000,"MiB/s":8388608,"MB/s":8000000}};
+  let rateUnit = document.querySelector('.rate-unit-select')?.value || 'kB/s';
+  const formatRate = (bps) => {{
+    const value = Number(bps) / rateUnits[rateUnit];
+    const digits = Math.abs(value) >= 1000 ? 1 : Math.abs(value) >= 100 ? 2 : 3;
+    return `${{value.toFixed(digits)}} ${{rateUnit}}`;
+  }};
+  const refreshRateText = () => document.querySelectorAll('[data-rate-bps]').forEach((node) => {{
+    const value = Number(node.dataset.rateBps);
+    node.textContent = Number.isFinite(value) ? formatRate(value) : '—';
+  }});
   const rootStyle = getComputedStyle(document.documentElement);
   const colors = [
     rootStyle.getPropertyValue('--series-1').trim(),
@@ -151,23 +219,44 @@ def plotly_script(specs: list[dict[str, Any]]) -> str:
     }});
     return;
   }}
-  specs.forEach((spec) => {{
-    const element = document.getElementById(spec.id);
-    if (!element) return;
-    if (spec.staticUnderCsp || (spec.requiresWebGL && !supportsWebGL)) {{ fallback(element, spec); return; }}
-    const data = (spec.data || []).map((trace, index) => {{
-      const copy = Object.assign({{}}, trace);
-      if (!copy.marker && ['bar','scatter'].includes(copy.type || 'scatter')) copy.marker = {{color: colors[index % colors.length]}};
-      if (!copy.line && (copy.type || 'scatter') === 'scatter') copy.line = {{color: colors[index % colors.length], width: 2}};
-      return copy;
+  const renderAll = () => {{
+    refreshRateText();
+    specs.forEach((spec) => {{
+      const element = document.getElementById(spec.id);
+      if (!element) return;
+      if (spec.staticUnderCsp || (spec.requiresWebGL && !supportsWebGL)) {{ fallback(element, spec); return; }}
+      const data = (spec.data || []).map((trace, index) => {{
+        const copy = Object.assign({{}}, trace);
+        if (spec.rateAxis === 'y' && Array.isArray(copy.y)) {{
+          copy.customdata = copy.y.slice();
+          copy.y = copy.y.map((value) => value == null ? null : Number(value) / rateUnits[rateUnit]);
+          copy.hovertemplate = copy.hovertemplate || `%{{x}}<br>%{{y:.4g}} ${{rateUnit}}<extra></extra>`;
+        }}
+        if (spec.rateAxis === 'x' && Array.isArray(copy.x)) {{
+          copy.customdata = copy.x.slice();
+          copy.x = copy.x.map((value) => value == null ? null : Number(value) / rateUnits[rateUnit]);
+          copy.hovertemplate = copy.hovertemplate || `%{{y}}<br>%{{x:.4g}} ${{rateUnit}}<extra></extra>`;
+        }}
+        if (!copy.marker && ['bar','scatter'].includes(copy.type || 'scatter')) copy.marker = {{color: colors[index % colors.length]}};
+        if (!copy.line && (copy.type || 'scatter') === 'scatter') copy.line = {{color: colors[index % colors.length], width: 2}};
+        return copy;
+      }});
+      const layout = Object.assign({{}}, baseLayout, spec.layout || {{}});
+      layout.xaxis = Object.assign({{}}, baseLayout.xaxis, (spec.layout || {{}}).xaxis || {{}});
+      layout.yaxis = Object.assign({{}}, baseLayout.yaxis, (spec.layout || {{}}).yaxis || {{}});
+      if (spec.rateAxis === 'y') layout.yaxis.title = spec.rateTitle ? `${{spec.rateTitle}} [${{rateUnit}}]` : rateUnit;
+      if (spec.rateAxis === 'x') layout.xaxis.title = spec.rateTitle ? `${{spec.rateTitle}} [${{rateUnit}}]` : rateUnit;
+      try {{
+        Promise.resolve(Plotly.react(element, data, layout, config)).catch((error) => fallback(element, spec, error));
+      }} catch (error) {{ fallback(element, spec, error); }}
     }});
-    const layout = Object.assign({{}}, baseLayout, spec.layout || {{}});
-    layout.xaxis = Object.assign({{}}, baseLayout.xaxis, (spec.layout || {{}}).xaxis || {{}});
-    layout.yaxis = Object.assign({{}}, baseLayout.yaxis, (spec.layout || {{}}).yaxis || {{}});
-    try {{
-      Promise.resolve(Plotly.newPlot(element, data, layout, config)).catch((error) => fallback(element, spec, error));
-    }} catch (error) {{ fallback(element, spec, error); }}
-  }});
+  }};
+  document.querySelectorAll('.rate-unit-select').forEach((select) => select.addEventListener('change', (event) => {{
+    rateUnit = event.target.value;
+    document.querySelectorAll('.rate-unit-select').forEach((other) => {{ other.value = rateUnit; }});
+    renderAll();
+  }}));
+  renderAll();
 }})();
 </script>
 """
@@ -189,7 +278,7 @@ main{max-width:1720px;margin:0 auto;padding:24px}
 .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:18px}
 h1{margin:0 0 7px;font-size:clamp(1.55rem,2.6vw,2.25rem)}h2{margin:0;font-size:1.08rem}h3{margin:.2rem 0 .7rem;font-size:1rem}
 p{line-height:1.5}.subtitle,.muted,.chart-description{color:var(--muted)}
-.nav-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.nav-links{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.rate-unit-control{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:.82rem}.rate-unit-control select{background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px}
 .badge{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:5px 10px;background:var(--panel);font-size:.85rem}
 .badge.good{border-color:color-mix(in srgb,var(--good) 65%,var(--border));color:var(--good)}
 .badge.warn{border-color:color-mix(in srgb,var(--warn) 65%,var(--border));color:var(--warn)}
@@ -223,8 +312,9 @@ def html_page(
     plot_specs: list[dict[str, Any]] | None = None,
     extra_css: str = "",
     extra_js: str = "",
+    standalone: bool = False,
 ) -> str:
     subtitle_html = f'<p class="subtitle">{esc(subtitle)}</p>' if subtitle else ""
-    plots = plotly_script(plot_specs or []) if plot_specs else ""
+    plots = plotly_script(plot_specs or [], inline_runtime=standalone) if plot_specs else ""
     custom_script = f"<script>{extra_js}</script>" if extra_js else ""
     return f'''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><style>{BASE_CSS}\n{extra_css}</style></head><body><main><header class="page-head"><div><h1>{esc(title)}</h1>{subtitle_html}</div><nav class="nav-links">{navigation}</nav></header>{body}</main>{plots}{custom_script}</body></html>'''

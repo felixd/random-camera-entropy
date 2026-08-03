@@ -1,9 +1,34 @@
-# Camera Entropy Distributed v7.10.0
+# Camera Entropy Distributed v7.11.0
 
 
-## Poprawki kampanii wielobitowego LSB v7.10.0
+## Kompleksowa kwalifikacja produkcyjna v7.11.0
 
-- RCT i APT są wykonywane na oryginalnych symbolach źródłowych `1..4` bitów na piksel, a nie na sztucznie serializowanym strumieniu bitplane.
+- Wszystkie aktywne tory obsługują maksymalnie `1..4` dolne bity kanału Y. Profile `full8` zostały usunięte z kampanii i walidacji CLI.
+- Kampania LSB porównuje pełną macierz `xor/direct/delta × 1..4`, czyli 12 przebiegów.
+- Raporty porównawcze pokazują dane tabelaryczne także na wykresach. Przepustowość jest przechowywana w `bit/s`, a w HTML można ją przełączać pomiędzy `bit/s`, `kbit/s`, `kB/s`, `MiB/s` i `MB/s`; domyślne jest `kB/s`.
+- Dodano profil WWW **PRODUCTION — kompleksowa macierz decyzyjna** oraz skrypt `qualification_production_assessment.py`.
+- Profil testuje w jednej, faktoryzowanej kampanii: wszystkie tryby i szerokości LSB, pairing i lagi, publiczne maski/serializacje, rozmiary wejścia SHA3-512, wszystkie warianty dual weave oraz powtarzalność kandydatów.
+- Wyniki są składane w jeden samodzielny plik `production_assessment_report.html`. Zawiera on osadzony runtime Plotly, pełny JSON, dokładne parametry każdego przebiegu, wykresy, tabele i linki diagnostyczne. Ten jeden plik można przesłać do końcowej oceny.
+- Dostępne poziomy: `quick`, `full` (domyślny) oraz `exhaustive`. Zmienne numeryczne są testowane metodą faktoryzowaną; raport jawnie opisuje pokrycie i nie udaje nieskończonego iloczynu wszystkich wartości ciągłych.
+
+Uruchomienie na najnowszym datasecie:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+ASSESSMENT_LEVEL=full \
+./qualification_production_assessment.py
+```
+
+Gotowy plik znajduje się w:
+
+```text
+data/production-assessment-*/production_assessment_report.html
+```
+
+## Poprawki kampanii wielobitowego LSB v7.11.1-rev2
+
+- RCT i APT są wykonywane na oryginalnych symbolach źródłowych, a nie na sztucznie serializowanym strumieniu bitplane.
 - APT używa okna 1024 próbek dla źródła binarnego oraz 512 próbek dla źródeł wielosymbolowych, zgodnie z SP 800-90B.
 - Nieudany przebieg zachowuje dane częściowe i generuje `run_report.html`, analizy BIN oraz bezpośrednie odsyłacze do przyczyny i logu.
 - Raport kampanii porównuje przepustowości lifetime, pokazuje podstawę pomiaru oraz relację `SHA3 / credited entropy`.

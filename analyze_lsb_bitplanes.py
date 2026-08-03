@@ -19,7 +19,9 @@ from typing import Any
 import cv2
 import numpy as np
 
-APP_VERSION = "2026.08.03.camera-entropy-lsb-analysis.7.10.0"
+from report_ui import chart_div, esc, fmt, html_page, metric_card, metrics_grid, table_html
+
+APP_VERSION = "2026.08.03.camera-entropy-lsb-analysis.7.11.0"
 BIT_ORDER = "pixel-major-lsb-first"
 
 
@@ -210,20 +212,70 @@ def main(argv: list[str] | None = None) -> int:
     write_matrix_png(root / "lsb_cross_plane_phi.png", phi, "Same-pixel cross-plane phi", "phi")
     write_matrix_png(root / "lsb_cross_plane_mi.png", mi, "Same-pixel cross-plane mutual information", "bit")
 
-    table_parts: list[str] = []
-    for row in rows:
-        lag_phi = row["lag1_phi"]
-        lag_phi_text = "—" if lag_phi is None else f"{float(lag_phi):.9g}"
-        table_parts.append(
-            "<tr>"
-            f"<td>b{row['bit_plane']}</td><td>{row['samples']}</td><td>{row['p1']:.9f}</td>"
-            f"<td>{row['shannon_entropy_bits_per_bit']:.9f}</td>"
-            f"<td>{row['marginal_min_entropy_bits_per_bit']:.9f}</td>"
-            f"<td>{lag_phi_text}</td>"
-            f"<td>{row['lag1_mutual_information_bits']:.9g}</td></tr>"
-        )
-    table = "".join(table_parts)
-    document = f"""<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Analiza bitów LSB</title><style>body{{font-family:system-ui;background:#0b0f14;color:#edf4fb;margin:0;padding:24px}}a{{color:#55b5ff}}section{{background:#131a22;border:1px solid #2a3441;border-radius:12px;padding:16px;margin:16px 0;overflow:auto}}table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px solid #2a3441;text-align:left}}.plots{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}img{{max-width:100%;background:white;border-radius:8px}}.warn{{color:#f8d477}}@media(max-width:900px){{.plots{{grid-template-columns:1fr}}}}</style></head><body><h1>Analiza bitów LSB</h1><p>{html.escape(root.name)} · {html.escape(str(config.get('sample_mode','xor')))} · {lsb_bits} LSB · {samples.shape[0]} pełnych symboli</p><p class="warn">Wyniki są diagnostycznymi estymatami empirycznymi, a nie deklaracją min-entropii SP 800-90B.</p><section><h2>Każdy bit osobno</h2><table><thead><tr><th>Bit</th><th>Próbki</th><th>p1</th><th>Shannon/bit</th><th>Hmin marginalna/bit</th><th>lag-1 phi</th><th>lag-1 MI</th></tr></thead><tbody>{table}</tbody></table></section><section><h2>Cały symbol {lsb_bits}-bitowy</h2><p>Shannon: <b>{symbol_shannon:.9f}</b> bit/symbol · Hmin marginalna: <b>{symbol_minimum:.9f}</b> bit/symbol · Hmin / pobrany bit: <b>{symbol_minimum / lsb_bits:.9f}</b></p></section><section><h2>Zależności między bitami tego samego piksela</h2><div class="plots"><figure><img src="lsb_cross_plane_phi.png"><figcaption>Współczynnik phi.</figcaption></figure><figure><img src="lsb_cross_plane_mi.png"><figcaption>Informacja wzajemna w bitach.</figcaption></figure></div><p><a href="lsb_cross_plane_matrices.npz">Macierze NPZ</a> · <a href="lsb_bitplane_summary.json">JSON</a> · <a href="lsb_bitplane_metrics.csv">CSV</a></p></section></body></html>"""
+    plane_labels = [f"b{row['bit_plane']}" for row in rows]
+    plot_specs = [
+        {
+            "id": "plane-entropy",
+            "data": [
+                {"type": "bar", "name": "P(1)", "x": plane_labels, "y": [row["p1"] for row in rows]},
+                {"type": "bar", "name": "Shannon/bit", "x": plane_labels, "y": [row["shannon_entropy_bits_per_bit"] for row in rows]},
+                {"type": "bar", "name": "Hmin/bit", "x": plane_labels, "y": [row["marginal_min_entropy_bits_per_bit"] for row in rows]},
+            ],
+            "layout": {"barmode": "group", "yaxis": {"title": "wartość", "rangemode": "tozero"}},
+        },
+        {
+            "id": "plane-temporal",
+            "data": [
+                {"type": "bar", "name": "|phi lag-1|", "x": plane_labels, "y": [abs(float(row["lag1_phi"])) if row["lag1_phi"] is not None else None for row in rows]},
+                {"type": "bar", "name": "MI lag-1 [bit]", "x": plane_labels, "y": [row["lag1_mutual_information_bits"] for row in rows]},
+            ],
+            "layout": {"barmode": "group", "yaxis": {"title": "zależność", "rangemode": "tozero"}},
+        },
+        {
+            "id": "symbol-distribution",
+            "data": [{"type": "bar", "name": "liczba", "x": list(range(1 << lsb_bits)), "y": counts.tolist()}],
+            "layout": {"xaxis": {"title": f"symbol {lsb_bits}-bitowy", "dtick": 1}, "yaxis": {"title": "liczba wystąpień", "rangemode": "tozero"}},
+        },
+    ]
+    plane_table = table_html(
+        ["Bit", "Próbki", "P(1)", "Shannon/bit", "Hmin marginalna/bit", "lag-1 phi", "lag-1 MI"],
+        [[
+            f"b{row['bit_plane']}", row["samples"], fmt(row["p1"], 9),
+            fmt(row["shannon_entropy_bits_per_bit"], 9), fmt(row["marginal_min_entropy_bits_per_bit"], 9),
+            fmt(row["lag1_phi"], 9), fmt(row["lag1_mutual_information_bits"], 9),
+        ] for row in rows], compact=True,
+    )
+    parameter_table = table_html(
+        ["Parametr", "Wartość"],
+        [[key, json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value] for key, value in sorted(config.items()) if key not in {"command_line", "rtsp_url"}],
+        compact=True,
+    )
+    cards = metrics_grid([
+        metric_card("Tryb", config.get("sample_mode", "xor"), f"{lsb_bits} LSB · {BIT_ORDER}"),
+        metric_card("Symbole", int(samples.shape[0]), f"alphabet {1 << lsb_bits}"),
+        metric_card("Hmin / symbol", fmt(symbol_minimum, 9), f"{fmt(symbol_minimum / lsb_bits, 9)} / input bit"),
+        metric_card("max cross-plane |phi|", fmt(summary["max_abs_cross_plane_phi"], 8), f"MI {fmt(summary['max_cross_plane_mutual_information_bits'], 8)} bit"),
+    ])
+    body = (
+        '<div class="callout warn"><strong>Diagnostyka:</strong> empiryczne estymaty z jednego datasetu nie są deklaracją min-entropii SP 800-90B.</div>'
+        + cards
+        + '<div class="chart-grid">'
+        + chart_div("plane-entropy", "Każda płaszczyzna — bias i entropia", "Dane z tabeli przedstawione na wspólnej skali.", 390)
+        + chart_div("plane-temporal", "Każda płaszczyzna — zależność temporalna", "Wartości bezwzględne phi lag-1 i mutual information.", 390)
+        + '</div>'
+        + chart_div("symbol-distribution", "Rozkład symboli źródłowych", "Pełny alfabet do 16 symboli dla maksymalnie 4 LSB.", 360)
+        + '<section><h2>Każdy bit osobno</h2>' + plane_table + '</section>'
+        + f'<section><h2>Cały symbol {lsb_bits}-bitowy</h2><p>Shannon: <b>{symbol_shannon:.9f}</b> bit/symbol · Hmin marginalna: <b>{symbol_minimum:.9f}</b> bit/symbol · Hmin / pobrany bit: <b>{symbol_minimum / lsb_bits:.9f}</b>.</p></section>'
+        + '<section><h2>Zależności pomiędzy bitami tego samego piksela</h2><div class="chart-grid"><figure><img src="lsb_cross_plane_phi.png" alt="Macierz phi" style="max-width:100%;background:white;border-radius:8px"><figcaption>Współczynnik phi.</figcaption></figure><figure><img src="lsb_cross_plane_mi.png" alt="Macierz mutual information" style="max-width:100%;background:white;border-radius:8px"><figcaption>Informacja wzajemna w bitach.</figcaption></figure></div></section>'
+        + '<details><summary>Dokładne parametry przebiegu</summary>' + parameter_table + '</details>'
+        + '<section><h2>Dane</h2><p><a href="lsb_cross_plane_matrices.npz">Macierze NPZ</a> · <a href="lsb_bitplane_summary.json">JSON</a> · <a href="lsb_bitplane_metrics.csv">CSV</a></p></section>'
+    )
+    document = html_page(
+        title="Analiza bitów LSB",
+        subtitle=f"{root.name} · {config.get('sample_mode', 'xor')} · {lsb_bits} LSB · {samples.shape[0]} symboli",
+        navigation='<a href="run_report.html">Raport główny</a><a href="lsb_bitplane_summary.json">JSON</a><a href="lsb_bitplane_metrics.csv">CSV</a>',
+        body=body, plot_specs=plot_specs,
+    )
     (root / "lsb_bitplane_report.html").write_text(document, encoding="utf-8")
     print(json.dumps({"status": "ok", "report": str(root / "lsb_bitplane_report.html"), "lsb_bits": lsb_bits}, ensure_ascii=False))
     return 0

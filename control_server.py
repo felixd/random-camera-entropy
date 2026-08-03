@@ -48,7 +48,7 @@ from werkzeug.security import check_password_hash
 
 from spatial_docs import register_documentation_routes
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.03.camera-entropy-distributed-control.7.10.0"
+APP_VERSION = "2026.08.03.camera-entropy-distributed-control.7.11.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -87,7 +87,7 @@ ALLOWED_PROFILES = {
     "dual-weave-lags": "smoke_dual_weave_lags.sh",
     "dual-weave-stagger-qualification": "qualification_dual_weave_stagger.sh",
     "lsb-campaign": "smoke_lsb_profiles.sh",
-    "production-review": "qualification_for_review.sh",
+    "production-assessment": "qualification_production_assessment.py",
     "global-all": "qualification_global_all_profiles.sh",
 }
 
@@ -114,13 +114,13 @@ PROFILE_LABELS = {
     "dual-weave-lags": "Dual weave — kampania lagów",
     "dual-weave-stagger-qualification": "Dual weave — kwalifikacja stagger-2",
     "lsb-campaign": "LSB — pełna kampania 1..4 bitów",
-    "production-review": "PRODUCTION REVIEW — kompleksowy raport do decyzji",
+    "production-assessment": "PRODUCTION — kompleksowa macierz decyzyjna",
     "global-all": "GLOBAL — wszystkie profile i kampanie",
 }
 
 PROFILE_HELP = {
+    "production-assessment": "Uruchamia kompleksową, faktoryzowaną macierz produkcyjną: 1–4 LSB, tryby źródła, pairing/lagi, wszystkie publiczne profile przestrzenne, sweep SHA3, dual weave i powtarzalność. Generuje jeden plik production_assessment_report.html do końcowej oceny.",
     "lsb-campaign": "Porównuje temporal XOR, bezpośrednie Y i delta dla 1..4 dolnych bitów; generuje wspólne podsumowanie.",
-    "production-review": "Kompleksowa macierz: tryby i 1–4 LSB, lagi, rozmiary wejścia SHA3, maski/fazy, serializacja i offsety. Wynik to jeden review_report.html z pełnymi parametrami i wykresami.",
     "global-all": "Uruchamia kolejno każdy wcześniejszy profil WWW oraz pełną kampanię LSB. Kontynuuje po błędach i zapisuje raport zbiorczy.",
     "spatial-baseline": "Pełna zamrożona maska, brak offsetu, kolejność row-major. Punkt odniesienia.",
     "spatial-checker-even": "Jedna faza szachownicy; usuwa bezpośrednie sąsiedztwo poziome i pionowe.",
@@ -138,6 +138,7 @@ PROFILE_HELP = {
 PARAMETER_HELP = {
     "source_id": "Zdefiniowane po stronie serwera źródło V4L2, TLS-Y, RTSP albo zapisany dataset Y/LSB. Dane uwierzytelniające i ścieżki nie trafiają do przeglądarki.",
     "profile": "Gotowy zestaw parametrów i rozmiarów testu. Profile spatial wymuszają opisaną geometrię.",
+    "assessment_level": "Poziom profilu PRODUCTION: quick wykonuje screening, full jest rekomendowany, exhaustive rozszerza macierz pairingu i lagów na wszystkie 1..4 LSB.",
     "exposure": "Ręczna ekspozycja źródła. Zmiana wpływa na fizykę źródła i wymaga nowej kalibracji.",
     "pair_lag_frames": "Odstęp czasowy k pomiędzy ramkami. To nie jest odległość pomiędzy pikselami.",
     "sample_mode": "xor = czasowy XOR, direct = dolne bity bieżącej klatki Y, delta = reszta Y_t-Y_(t-k) modulo 256.",
@@ -339,7 +340,7 @@ class JobManager:
             output_root = Path(str(job.get("output_root", "")))
             ready = any(
                 output_root.joinpath(name).exists()
-                for name in ("READY.json", "qualification_report.html", "lsb_campaign_report.html", "global_campaign_report.html")
+                for name in ("READY.json", "qualification_report.html", "lsb_campaign_report.html", "production_assessment_report.html", "global_campaign_report.html")
             )
             failed = output_root.joinpath("run_failed.json").exists()
             if output_root.is_dir() and not failed:
@@ -479,6 +480,10 @@ class JobManager:
         calibration = self._positive_int(payload, "calibration_pairs", 32, 1_000_000)
         pair_lag = self._positive_int(payload, "pair_lag_frames", 1, 4096)
         lsb_bits = self._positive_int(payload, "lsb_bits", 1, 4)
+        assessment_level = str(payload.get("assessment_level", "full")).strip().lower() or "full"
+        if assessment_level not in {"quick", "full", "exhaustive"}:
+            raise ValueError("assessment_level must be quick, full or exhaustive")
+        env["ASSESSMENT_LEVEL"] = assessment_level
         sample_mode = str(payload.get("sample_mode", "")).strip()
         if sample_mode and sample_mode not in {"xor", "direct", "delta"}:
             raise ValueError("sample_mode must be xor, direct or delta")
@@ -616,7 +621,7 @@ class JobManager:
                 env[env_name] = str(mib * MIB)
 
         slug = f"web-{profile}-{timestamp_slug()}-{job_id[:8]}"
-        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "production-review", "global-all"}:
+        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "production-assessment", "global-all"}:
             env["CAMPAIGN"] = slug
             output_root = self.settings.data_root / slug
         else:
@@ -857,18 +862,21 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         spatial_campaign = path / "spatial_campaign_report.html"
         lsb_campaign = path / "lsb_campaign_report.html"
         global_campaign = path / "global_campaign_report.html"
+        production_assessment = path / "production_assessment_report.html"
         report = path / "run_report.html"
         status = "running/incomplete"
         if failed.exists():
             status = "failed"
-        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists() or lsb_campaign.exists() or global_campaign.exists():
+        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists() or lsb_campaign.exists() or production_assessment.exists() or global_campaign.exists():
             status = "complete"
         elif ready.exists():
             status = "ready"
         elif (path / "output_complete.json").exists():
             status = "analyzing"
         report_url = (
-            f"/data/{path.name}/global_campaign_report.html"
+            f"/data/{path.name}/production_assessment_report.html"
+            if production_assessment.exists()
+            else f"/data/{path.name}/global_campaign_report.html"
             if global_campaign.exists()
             else f"/data/{path.name}/lsb_campaign_report.html"
             if lsb_campaign.exists()
@@ -883,6 +891,7 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             else None
         )
         report_label = (
+            "Production assessment" if production_assessment.exists() else
             "Global campaign" if global_campaign.exists() else
             "LSB campaign" if lsb_campaign.exists() else
             "Kwalifikacja" if qualification.exists() else
@@ -891,7 +900,14 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             "Raport przebiegu" if report.exists() else "Brak raportu"
         )
         headline = ""
-        if global_campaign.exists():
+        if production_assessment.exists():
+            assessment = read_json_object(path / "production_assessment_summary.json")
+            status_summary = assessment.get("status", {}) if isinstance(assessment.get("status"), dict) else {}
+            headline = (
+                f"complete {status_summary.get('complete', '—')}/{status_summary.get('total', '—')} · "
+                f"failed {status_summary.get('failed', '—')} · health {status_summary.get('health_failures', '—')}"
+            )
+        elif global_campaign.exists():
             campaign_summary = read_json_object(path / "global_campaign_summary.json")
             steps = campaign_summary.get("steps", []) if isinstance(campaign_summary.get("steps"), list) else []
             headline = (

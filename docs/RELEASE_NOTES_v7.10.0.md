@@ -1,4 +1,4 @@
-# Camera Entropy Distributed v7.10.0
+# Camera Entropy Distributed v7.11.1-rev2
 
 Data wydania: 2026-08-03
 

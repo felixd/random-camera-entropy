@@ -68,7 +68,7 @@ from entropy_bitplanes import (
 )
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.03.camera-entropy-distributed.7.10.0"
+APP_VERSION = "2026.08.03.camera-entropy-distributed.7.11.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -281,8 +281,8 @@ class ContinuousHealthTests:
     ) -> None:
         if not 2 <= int(alphabet_size) <= 256:
             raise ValueError("health alphabet_size must be in 2..256")
-        if not 1 <= int(sample_width_bits) <= 8:
-            raise ValueError("health sample_width_bits must be in 1..8")
+        if not 1 <= int(sample_width_bits) <= 4:
+            raise ValueError("health sample_width_bits must be in 1..4")
         maximum_entropy = math.log2(int(alphabet_size))
         if h_min > maximum_entropy:
             raise ValueError(

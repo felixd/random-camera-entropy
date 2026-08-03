@@ -123,7 +123,7 @@ def main() -> int:
             stdout=subprocess.DEVNULL,
         )
         summary = json.loads((campaign / "lsb_campaign_summary.json").read_text(encoding="utf-8"))
-        assert summary["schema"] == "camera-entropy-lsb-campaign-v3"
+        assert summary["schema"] == "camera-entropy-lsb-campaign-v4"
         assert summary["total_profiles"] == 3
         assert summary["complete"] == 2
         assert summary["failed"] == 1
@@ -141,10 +141,10 @@ def main() -> int:
         assert rows["delta-lsb3"]["report"] == "delta-lsb3/run_report.html"
         assert rows["delta-lsb3"]["profile_log"] == "delta-lsb3.profile.log"
         report = (campaign / "lsb_campaign_report.html").read_text(encoding="utf-8")
-        assert "Empirical Hmin bit/s" in report
-        assert "Rate basis" in report
-        assert "SHA3 / credited" in report
-        assert "Failure reason" in report
+        assert "Przepustowość wszystkich etapów" in report
+        assert "rate-unit-select" in report
+        assert "Parametry każdego testu" in report
+        assert "conditioned_output_bps" in report
         assert "RCT:full" in report
         assert "delta-lsb3.profile.log" in report
         assert (campaign / "lsb_campaign_summary.csv").is_file()

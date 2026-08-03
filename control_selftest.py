@@ -163,6 +163,7 @@ def main() -> int:
         settings = make_settings(base, data, sources_path, secret)
         assert ALLOWED_PROFILES["dual-weave-stagger2"] == "smoke_dual_weave_stagger2.sh"
         assert ALLOWED_PROFILES["temporal-sha3"] == "smoke_temporal_sha3.sh"
+        assert ALLOWED_PROFILES["production-assessment"] == "qualification_production_assessment.py"
         loaded_sources = load_sources(sources_path)
         assert loaded_sources[0]["id"] == "local"
         manager = JobManager(settings, loaded_sources, logging.getLogger("control-selftest"))
@@ -186,6 +187,7 @@ def main() -> int:
         assert env["LIVE_HEATMAP_INTERVAL_SECONDS"] == "15"
         assert env["LIVE_HEATMAP_MAX_STAGES"] == "7"
         assert env["LIVE_HEATMAP_MIN_BYTES"] == "8192"
+        assert env["ASSESSMENT_LEVEL"] == "full"
         assert slug.startswith("web-dual-weave-stagger2-")
 
         dataset_source = next(item for item in loaded_sources if item["id"] == "buffered-latest")

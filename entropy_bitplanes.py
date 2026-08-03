@@ -31,7 +31,7 @@ def validate_lsb_bits(lsb_bits: int) -> int:
 
 def low_mask(lsb_bits: int) -> np.uint8:
     bits = validate_lsb_bits(lsb_bits)
-    return np.uint8(0xFF if bits == 8 else (1 << bits) - 1)
+    return np.uint8((1 << bits) - 1)
 
 
 def sample_values(
@@ -138,8 +138,8 @@ def minimum_conditioner_input_bits(
     """Conservative input block required not to emit more bits than credited.
 
     A serialized block contains ``lsb_bits`` input bits per selected pixel.  The
-    credit is deliberately separate from capture width: collecting eight LSBs
-    does not claim eight bits of min-entropy.
+    credit is deliberately separate from capture width: collecting multiple LSBs
+    does not claim the same number of min-entropy bits.
     """
     bits = validate_lsb_bits(lsb_bits)
     credit = float(entropy_credit_bits_per_pixel)
@@ -158,5 +158,5 @@ def sample_label(mode: str, lsb_bits: int) -> str:
     }
     if mode not in labels:
         raise ValueError(f"unsupported sample mode: {mode}")
-    suffix = "full Y8" if bits == 8 else f"{bits} LSB"
+    suffix = f"{bits} LSB"
     return f"{labels[mode]} — {suffix}"

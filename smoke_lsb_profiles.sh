@@ -31,6 +31,33 @@ for mode in xor direct delta; do
   done
 done
 
+"$VENV_PYTHON" - "$CAMPAIGN_DIR/lsb_campaign_config.json" "$PROFILE_BYTES" "$PROFILE_WARMUP" "$PROFILE_CALIBRATION" "$CONTINUE" <<'PYCONFIG'
+import json, os, sys
+path, profile_bytes, warmup, calibration, cont = sys.argv[1:]
+source_keys = (
+    "SOURCE_TYPE", "DEVICE", "WIDTH", "HEIGHT", "CAMERA_FPS", "EXPOSURE",
+    "TLS_HOST", "TLS_PORT", "TLS_SERVER_NAME", "DATASET_DIR", "DATASET_START_FRAME",
+    "DATASET_MAX_FRAMES", "DATASET_REALTIME", "DATASET_RATE", "DATASET_FOLLOW",
+)
+value = {
+    "schema": "camera-entropy-lsb-campaign-config-v1",
+    "sample_modes": ["xor", "direct", "delta"],
+    "lsb_bits": [1, 2, 3, 4],
+    "profile_count": 12,
+    "profile_bytes": int(profile_bytes),
+    "warmup_seconds": int(warmup),
+    "calibration_pairs": int(calibration),
+    "continue_on_error": int(cont),
+    "default_entropy_credit": float(os.environ.get("LSB_DEFAULT_ENTROPY_CREDIT", "0.25")),
+    "xor1_entropy_credit": float(os.environ.get("LSB_XOR1_ENTROPY_CREDIT", "1.0")),
+    "xor2_entropy_credit": float(os.environ.get("LSB_XOR2_ENTROPY_CREDIT", "0.5")),
+    "source": {key: os.environ[key] for key in source_keys if key in os.environ},
+}
+with open(path, "w", encoding="utf-8") as stream:
+    json.dump(value, stream, indent=2, ensure_ascii=False)
+    stream.write("\n")
+PYCONFIG
+
 failures=0
 for specification in "${profiles[@]}"; do
   IFS='|' read -r name mode bits credit <<< "$specification"

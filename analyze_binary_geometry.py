@@ -21,7 +21,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-APP_VERSION = "2026.08.03.camera-entropy-binary-geometry.7.10.0"
+APP_VERSION = "2026.08.03.camera-entropy-binary-geometry.7.11.0"
 REPORT_NAME = "binary_geometry_report.html"
 SUMMARY_NAME = "binary_geometry_summary.json"
 CSV_NAME = "binary_geometry_metrics.csv"
@@ -267,7 +267,7 @@ def select_bin_files(
 
 def write_dual_weave_svg(path: Path) -> None:
     path.write_text("""<svg xmlns="http://www.w3.org/2000/svg" width="980" height="250" viewBox="0 0 980 250">
-<style>text{font-family:system-ui,sans-serif;fill:#eaf3fb}.box{fill:#152230;stroke:#55b5ff;stroke-width:2}.arrow{stroke:#94a3b5;stroke-width:3;marker-end:url(#a)}.small{font-size:14px;fill:#a9bac9}.title{font-size:19px;font-weight:700}</style><defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#94a3b5"/></marker></defs><rect width="980" height="250" fill="#0b0f14"/><rect class="box" x="30" y="75" width="170" height="90" rx="10"/><text class="title" x="55" y="112">Y frames</text><text class="small" x="55" y="138">pair lag k</text><line class="arrow" x1="200" y1="120" x2="285" y2="120"/><rect class="box" x="285" y="75" width="190" height="90" rx="10"/><text class="title" x="310" y="108">Frozen mask</text><text class="small" x="310" y="135">LSB0 calibration</text><line class="arrow" x1="475" y1="120" x2="560" y2="120"/><rect class="box" x="560" y="55" width="190" height="130" rx="10"/><text class="title" x="585" y="93">Bit planes</text><text class="small" x="585" y="120">1..8 LSB</text><text class="small" x="585" y="143">LSB-first</text><line class="arrow" x1="750" y1="120" x2="825" y2="120"/><rect class="box" x="825" y="75" width="125" height="90" rx="10"/><text class="title" x="845" y="110">VN /</text><text class="title" x="845" y="137">SHA3</text></svg>""", encoding="utf-8")
+<style>text{font-family:system-ui,sans-serif;fill:#eaf3fb}.box{fill:#152230;stroke:#55b5ff;stroke-width:2}.arrow{stroke:#94a3b5;stroke-width:3;marker-end:url(#a)}.small{font-size:14px;fill:#a9bac9}.title{font-size:19px;font-weight:700}</style><defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#94a3b5"/></marker></defs><rect width="980" height="250" fill="#0b0f14"/><rect class="box" x="30" y="75" width="170" height="90" rx="10"/><text class="title" x="55" y="112">Y frames</text><text class="small" x="55" y="138">pair lag k</text><line class="arrow" x1="200" y1="120" x2="285" y2="120"/><rect class="box" x="285" y="75" width="190" height="90" rx="10"/><text class="title" x="310" y="108">Frozen mask</text><text class="small" x="310" y="135">LSB0 calibration</text><line class="arrow" x1="475" y1="120" x2="560" y2="120"/><rect class="box" x="560" y="55" width="190" height="130" rx="10"/><text class="title" x="585" y="93">Bit planes</text><text class="small" x="585" y="120">1..4 LSB</text><text class="small" x="585" y="143">LSB-first</text><line class="arrow" x1="750" y1="120" x2="825" y2="120"/><rect class="box" x="825" y="75" width="125" height="90" rx="10"/><text class="title" x="845" y="110">VN /</text><text class="title" x="845" y="137">SHA3</text></svg>""", encoding="utf-8")
 
 
 def esc(value: Any) -> str:

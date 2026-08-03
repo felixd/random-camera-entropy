@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 
 from report_ui import (
-    chart_div, esc, fmt as ui_fmt, fmt_percent, fmt_rate, html_page,
+    chart_div, esc, fmt as ui_fmt, fmt_percent, fmt_rate, html_page, rate_span, rate_unit_selector,
     metric_card, metrics_grid, table_html,
 )
 
@@ -350,6 +350,11 @@ def main() -> int:
             },
         },
         {
+            "id": "absolute-throughput-chart", "rateAxis": "y", "rateTitle": "SHA3-512",
+            "data": [{"type": "bar", "x": labels, "y": throughput_bps, "name": "SHA3-512"}],
+            "layout": {"xaxis": {"title": "Wariant", "tickangle": -20}, "yaxis": {"rangemode": "tozero"}},
+        },
+        {
             "id": "positional-chart",
             "data": [
                 {
@@ -428,7 +433,7 @@ def main() -> int:
             ),
             metric_card(
                 "Przepustowość",
-                fmt_rate(diagnostic_best.get("conditioned_bps_until_complete")),
+                rate_span(diagnostic_best.get("conditioned_bps_until_complete")),
                 f"{ui_fmt(diagnostic_best.get('throughput_ratio_vs_checkerboard'), 4)}× checkerboard",
             ),
             metric_card(
@@ -461,7 +466,7 @@ def main() -> int:
         key_headers,
         [
             [
-                row.get("order"), row.get("alignment"), fmt_rate(row.get("conditioned_bps_until_complete")),
+                row.get("order"), row.get("alignment"), rate_span(row.get("conditioned_bps_until_complete")),
                 ui_fmt(row.get("throughput_ratio_vs_checkerboard"), 5),
                 f"{ui_fmt(row.get('time_to_target_seconds'), 6)} s",
                 ui_fmt(row.get("conditioner_input_positional_worst_abs_phi"), 7),
@@ -521,7 +526,8 @@ def main() -> int:
         + metrics_grid(best_cards)
         + stagger_diagram
         + '<div class="chart-grid">'
-        + chart_div("throughput-chart", "Rzeczywista przepustowość", "Czas jest liczony do osiągnięcia celu przez dany conditioner, a nie do końca całego smoke.", 360)
+        + chart_div("throughput-chart", "Przepustowość względem baseline", "Każdy wariant używa własnego czasu osiągnięcia celu.", 360)
+        + chart_div("absolute-throughput-chart", "Bezwzględna przepustowość SHA3-512", "Jednostkę można zmienić u góry raportu.", 360)
         + chart_div("positional-chart", "Korelacja C0 ↔ C1 w bloku SHA3", "Najważniejszy wykres dla porównania same-group i stagger. Mniejsza wartość |φ| jest lepsza.", 360)
         + '</div><div class="chart-grid">'
         + chart_div("boundary-lags-chart", "Korelacja przy granicach bloków", "Kontrola lagów 1022–1026 oraz 2047–2049 w serializowanym wejściu conditionera.", 360)
@@ -534,7 +540,8 @@ def main() -> int:
         + '<section><h2>Jak czytać wynik</h2><p>Dobry kandydat powinien jednocześnie zachować około 2× przepustowości checkerboardu, obniżyć korelację pozycyjną C0↔C1 względem same-group, nie tworzyć pików przy 1023–1025 i 2047–2049, mieć prawidłowe wyjście SHA3 oraz zero latchy RCT/APT i clippingu. Raport pozostaje diagnostyczny i nie zastępuje SP 800-90B non-IID.</p></section>'
     )
     navigation = (
-        '<a href="run_report.html">Raport główny</a>'
+        rate_unit_selector()
+        + '<a href="run_report.html">Raport główny</a>'
         '<a href="dual_weave_report.json">JSON</a>'
         '<a href="dual_weave_comparison.csv">Porównanie CSV</a>'
         '<a href="dual_weave_positional_correlation.csv">Pozycje CSV</a>'

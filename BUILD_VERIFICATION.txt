@@ -1,7 +1,64 @@
-Build verification for 7.11.0
-- Python compileall: PASS
-- Bash syntax for all root scripts: PASS
-- Existing selftests: PASS (18 tests)
-- control_selftest.py: NOT RUN in build container because Flask is not installed there
-- Synthetic review campaign/report generation: PASS
-- review_report.html contains embedded machine-readable JSON: PASS
+Camera Entropy Distributed v7.11.0 — build verification
+Generated: 2026-08-03
+
+Integrated source
+-----------------
+Base archive: random-camera-entropy-dev(3).zip
+Result: complete project tree, not a patch and no backup-file generator.
+
+Implemented scope
+-----------------
+- Active LSB width limited to 1..4 in CLI, worker, control panel, campaign and analyzers.
+- LSB campaign reduced to xor/direct/delta × 1..4 (12 profiles).
+- Comparison tables are represented by charts in LSB and production-decision reports.
+- Throughput display selector: bit/s, kbit/s, kB/s, MiB/s and MB/s; default kB/s.
+- New production-assessment profile with quick/full/exhaustive levels.
+- Full level: 75 factorised cases; exhaustive level: 104 cases.
+- Coverage: LSB mode/width, pairing/lag, spatial selection/serialization,
+  entropy-credit sensitivity, SHA3-512 input sweep, dual weave and reproducibility.
+- One standalone production_assessment_report.html with embedded Plotly runtime,
+  complete machine-readable JSON and exact parameters for every case.
+- Web control field for ASSESSMENT_LEVEL.
+- Version unified at 2026.08.03.camera-entropy-distributed.7.11.0.
+
+Verification performed
+----------------------
+PASS: python3 -m compileall -q .
+PASS: python3 -m py_compile control_selftest.py
+PASS: bash -n for every top-level *.sh
+PASS: python3 -m json.tool for every top-level *.json
+PASS: JavaScript syntax check of embedded Plotly runtime and report unit-switch code with Node.js 22.
+
+Self-tests passed
+-----------------
+- selftest.py
+- selftest_binary_geometry.py
+- selftest_binary_geometry_2d.py
+- selftest_buffered_dataset.py
+- selftest_cli_lsb_validation.py
+- selftest_control_spatial.py
+- selftest_entropy_bitplanes.py
+- selftest_failed_run_report.py
+- selftest_live_byte_diagnostics.py
+- selftest_lsb_bitplane_analysis.py
+- selftest_lsb_campaign_summary.py
+- selftest_production_assessment.py
+- selftest_profile_campaigns.py
+- selftest_report_units.py
+- selftest_spatial_sampling.py
+- selftest_symbol_health.py
+- selftest_temporal_sha3.py
+- selftest_tls_reconnect.py
+- selftest_transport_lifecycle.py
+- selftest_worker_state_header.py
+
+Not executed in this build container
+------------------------------------
+- control_selftest.py runtime: Flask/Werkzeug are not installed in the build
+  container. The file compiles successfully; control/template behavior is also
+  covered statically by selftest_control_spatial.py. Run control_selftest.py in
+  the project virtual environment after installing requirements.txt.
+- The 75/104-case assessment was not executed against the user's physical
+  camera or 8 GB buffered dataset. Synthetic end-to-end report generation,
+  matrix construction, standalone HTML, embedded JSON and unit conversion were
+  tested.

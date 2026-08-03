@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from report_ui import (
-    chart_div, esc, fmt, fmt_rate, html_page, metric_card, metrics_grid, table_html,
+    chart_div, esc, fmt, fmt_rate, html_page, metric_card, metrics_grid, rate_span, rate_unit_selector, table_html,
 )
 
 
@@ -128,6 +128,15 @@ def main() -> int:
             },
         },
         {
+            "id": "campaign-absolute-throughput", "rateAxis": "y", "rateTitle": "SHA3-512",
+            "data": [{
+                "type": "bar", "x": labels,
+                "y": [row.get("conditioned_bps_until_complete") for row in rows],
+                "name": "SHA3-512",
+            }],
+            "layout": {"xaxis": {"title": "Przebieg i wariant", "tickangle": -30}, "yaxis": {"rangemode": "tozero"}},
+        },
+        {
             "id": "campaign-positional",
             "data": [
                 {
@@ -188,7 +197,7 @@ def main() -> int:
     if best:
         cards.extend([
             metric_card("Najlepszy wariant", f"{best.get('order')} / {best.get('alignment')}", "diagnostyczny ranking całej kampanii", "good"),
-            metric_card("Średnia przepustowość", fmt_rate(best.get("throughput_bps_mean")), f"{fmt(best.get('throughput_ratio_mean'), 5)}× baseline"),
+            metric_card("Średnia przepustowość", rate_span(best.get("throughput_bps_mean")), f"{fmt(best.get('throughput_ratio_mean'), 5)}× baseline"),
             metric_card("Maks. |φ| pozycyjne", fmt(best.get("positional_abs_phi_max"), 7), f"średnia {fmt(best.get('positional_abs_phi_mean'), 7)}"),
             metric_card("Najgorsze χ² p SHA3", fmt(best.get("conditioned_chi_p_min"), 6), f"Hmin min {fmt(best.get('conditioned_hmin_min'), 7)}"),
         ])
@@ -196,20 +205,20 @@ def main() -> int:
         cards.append(metric_card("Wynik", "Brak zdrowego kompletnego wariantu", "sprawdź latches i raporty przebiegów", "bad"))
 
     aggregate_table = table_html(
-        ["Order", "Alignment", "Runs", "Latches", "Śr. × baseline", "Śr. bit/s", "Maks. |φ| pozycyjne", "Maks. |φ| SHA3", "Min Hmin", "Min χ² p"],
+        ["Order", "Alignment", "Runs", "Latches", "Śr. × baseline", "Śr. przepustowość", "Maks. |φ| pozycyjne", "Maks. |φ| SHA3", "Min Hmin", "Min χ² p"],
         [[
             item.get("order"), item.get("alignment"), item.get("runs"), item.get("latches"),
-            fmt(item.get("throughput_ratio_mean"), 6), fmt_rate(item.get("throughput_bps_mean")),
+            fmt(item.get("throughput_ratio_mean"), 6), rate_span(item.get("throughput_bps_mean")),
             fmt(item.get("positional_abs_phi_max"), 7), fmt(item.get("conditioned_abs_lag1_phi_max"), 7),
             fmt(item.get("conditioned_hmin_min"), 7), fmt(item.get("conditioned_chi_p_min"), 6),
         ] for item in aggregates],
         compact=True,
     )
     run_table = table_html(
-        ["Run", "k", "Order", "Alignment", "× baseline", "bit/s", "Czas", "Maks. |φ| pozycyjne", "Offset", "|φ| 1023", "|φ| 1024", "|φ| 1025", "SHA3 |φ|", "Hmin", "χ² p", "Health"],
+        ["Run", "k", "Order", "Alignment", "× baseline", "Przepustowość", "Czas", "Maks. |φ| pozycyjne", "Offset", "|φ| 1023", "|φ| 1024", "|φ| 1025", "SHA3 |φ|", "Hmin", "χ² p", "Health"],
         [[
             row.get("run"), row.get("k"), row.get("order"), row.get("alignment"),
-            fmt(row.get("throughput_ratio_vs_checkerboard"), 5), fmt_rate(row.get("conditioned_bps_until_complete")),
+            fmt(row.get("throughput_ratio_vs_checkerboard"), 5), rate_span(row.get("conditioned_bps_until_complete")),
             f"{fmt(row.get('time_to_target_seconds'), 6)} s", fmt(row.get("conditioner_input_positional_worst_abs_phi"), 7),
             row.get("conditioner_input_positional_worst_lag"),
             fmt(abs(float(row["input_phi_lag_1023"])) if isinstance(row.get("input_phi_lag_1023"), (int, float)) else None, 7),
@@ -236,6 +245,7 @@ def main() -> int:
         + metrics_grid(cards)
         + '<div class="chart-grid">'
         + chart_div("campaign-throughput", "Przepustowość względem checkerboardu", "Każdy słupek używa własnego czasu osiągnięcia celu conditionera.", 390)
+        + chart_div("campaign-absolute-throughput", "Bezwzględna przepustowość SHA3-512", "Jednostkę można zmienić u góry raportu.", 390)
         + chart_div("campaign-positional", "Korelacja pozycyjna między C0 i C1", "Najważniejsza metryka do oceny skuteczności stagger.", 390)
         + '</div><div class="chart-grid">'
         + chart_div("campaign-boundary", "Lagi 1023–1025", "Sprawdzenie granicy pomiędzy 1024 bitami C0 i 1024 bitami C1.", 360)
@@ -247,7 +257,8 @@ def main() -> int:
         + '<section><h2>Kryteria decyzji</h2><p>Priorytetem jest zero latchy, następnie mała korelacja pozycyjna C0↔C1, brak pików przy 1023–1025 i 2047–2049, około 2× przepustowości checkerboardu oraz stabilne wyjście SHA3. Raport diagnostyczny nie zastępuje SP 800-90B non-IID.</p></section>'
     )
     navigation = (
-        '<a href="dual_weave_campaign_summary.json">JSON</a>'
+        rate_unit_selector()
+        + '<a href="dual_weave_campaign_summary.json">JSON</a>'
         '<a href="dual_weave_campaign_summary.csv">Przebiegi CSV</a>'
         '<a href="dual_weave_campaign_aggregate.csv">Agregaty CSV</a>'
     )

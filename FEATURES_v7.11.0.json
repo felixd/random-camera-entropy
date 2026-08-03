@@ -1,10 +1,37 @@
 {
   "version": "2026.08.03.camera-entropy-distributed.7.11.0",
-  "changes": [
-    "Limit LSB extraction and UI/API validation to 1..4 bits",
-    "Add comprehensive production-review qualification matrix",
-    "Generate one review_report.html with embedded machine-readable JSON",
-    "Add throughput charts with switchable bit/s, kbit/s, kB/s, MiB/s and MB/s units; default kB/s",
-    "Show exact parameters for every test and group results by test family"
-  ]
+  "release_date": "2026-08-03",
+  "features": {
+    "maximum_lsb_bits": 4,
+    "lsb_campaign": {
+      "sample_modes": ["xor", "direct", "delta"],
+      "widths": [1, 2, 3, 4],
+      "profiles": 12,
+      "summary_schema": "camera-entropy-lsb-campaign-v4"
+    },
+    "throughput_units": {
+      "stored_as": "bit/s",
+      "default_display": "kB/s",
+      "selectable": ["bit/s", "kbit/s", "kB/s", "MiB/s", "MB/s"]
+    },
+    "production_assessment": {
+      "profile": "production-assessment",
+      "levels": ["quick", "full", "exhaustive"],
+      "default_level": "full",
+      "full_case_count": 75,
+      "exhaustive_case_count": 104,
+      "coverage": [
+        "sample mode and LSB width",
+        "temporal pairing and lag",
+        "spatial selection and serialization",
+        "entropy-credit sensitivity",
+        "SHA3-512 input sweep",
+        "dual-weave order/alignment/lag",
+        "candidate reproducibility"
+      ],
+      "single_file_report": "production_assessment_report.html",
+      "standalone_plotly": true,
+      "embedded_machine_json": true
+    }
+  }
 }
