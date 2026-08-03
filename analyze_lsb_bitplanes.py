@@ -122,8 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.run_dir.expanduser().resolve()
     config = read_json(root / "runner_config.json")
     lsb_bits = int(args.lsb_bits if args.lsb_bits is not None else config.get("lsb_bits", 1))
-    if not 1 <= lsb_bits <= 8:
-        raise SystemExit("lsb-bits must be in 1..8")
+    if not 1 <= lsb_bits <= 4:
+        raise SystemExit("lsb-bits must be in 1..4")
     bit_order = str(config.get("bit_order", BIT_ORDER))
     if bit_order != BIT_ORDER:
         raise SystemExit(f"unsupported bit order: {bit_order}")

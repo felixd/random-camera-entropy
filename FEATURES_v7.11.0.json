@@ -1,0 +1,10 @@
+{
+  "version": "2026.08.03.camera-entropy-distributed.7.11.0",
+  "changes": [
+    "Limit LSB extraction and UI/API validation to 1..4 bits",
+    "Add comprehensive production-review qualification matrix",
+    "Generate one review_report.html with embedded machine-readable JSON",
+    "Add throughput charts with switchable bit/s, kbit/s, kB/s, MiB/s and MB/s units; default kB/s",
+    "Show exact parameters for every test and group results by test family"
+  ]
+}

@@ -66,30 +66,30 @@ def main() -> int:
             "--sample-mode",
             "delta",
             "--lsb-bits",
-            "8",
+            "4",
             "--entropy-credit-bits-per-pixel",
             "0.25",
             "--conditioner-input-bits",
-            "16384",
+            "8192",
         ],
     )
     assert args.sample_mode == "delta"
-    assert args.lsb_bits == 8
-    assert args.minimum_conditioner_input_bits == 16384
+    assert args.lsb_bits == 4
+    assert args.minimum_conditioner_input_bits == 8192
     assert args.apt_window == 512
 
-    expect_error(server, ["--lsb-bits", "9"], "lsb-bits must be in 1..8")
+    expect_error(server, ["--lsb-bits", "5"], "lsb-bits must be in 1..4")
     expect_error(
         server,
         [
             "--lsb-bits",
-            "8",
+            "4",
             "--entropy-credit-bits-per-pixel",
             "0.25",
             "--conditioner-input-bits",
             "2048",
         ],
-        "need at least 16384 bits",
+        "need at least 8192 bits",
     )
     expect_error(
         server,

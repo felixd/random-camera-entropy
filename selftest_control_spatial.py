@@ -58,7 +58,7 @@ def main() -> int:
     ):
         assert marker in template, marker
     assert 'id="contextHelp"' not in template
-    assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="any" inputmode="decimal"' in template
+    assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="4" step="any" inputmode="decimal"' in template
     assert "field.valueAsNumber" in template
     assert "Number.isFinite(number)" in template
 

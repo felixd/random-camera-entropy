@@ -14,12 +14,12 @@ PROFILE_CALIBRATION="${LSB_PROFILE_CALIBRATION_PAIRS:-128}"
 CONTINUE="${LSB_CONTINUE_ON_ERROR:-1}"
 mkdir -p "$CAMPAIGN_DIR" "$STATE_DIR"
 
-# Exhaustive sweep: every sample mode and every capture width 1..8.
+# Exhaustive sweep: every sample mode and every supported capture width 1..4.
 # Credits are conservative bookkeeping defaults only and can be overridden.
 profiles=()
 for mode in xor direct delta; do
-  for bits in {1..8}; do
-    suffix="lsb$bits"; (( bits == 8 )) && suffix="full8"
+  for bits in {1..4}; do
+    suffix="lsb$bits"
     name="$mode-$suffix"; [[ "$mode" == direct ]] && name="y-$suffix"
     credit="${LSB_DEFAULT_ENTROPY_CREDIT:-0.25}"
     if [[ "$mode" == xor && "$bits" == 1 ]]; then

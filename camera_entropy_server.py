@@ -4533,7 +4533,7 @@ def parse_args() -> argparse.Namespace:
         "--lsb-bits",
         type=int,
         default=1,
-        help="Number of least-significant Y/sample bits to serialize, 1..8",
+        help="Number of least-significant Y/sample bits to serialize, 1..4",
     )
     parser.add_argument(
         "--entropy-credit-bits-per-pixel",
@@ -4939,8 +4939,8 @@ def parse_args() -> argparse.Namespace:
             "--spatial-comparison uses the fixed compatibility variants; "
             "run custom masks as separate profiles with --no-spatial-comparison"
         )
-    if not 1 <= args.lsb_bits <= 8:
-        parser.error("lsb-bits must be in 1..8")
+    if not 1 <= args.lsb_bits <= 4:
+        parser.error("lsb-bits must be in 1..4")
     if not math.isfinite(args.assessed_min_entropy) or not 0 < args.assessed_min_entropy <= args.lsb_bits:
         parser.error("assessed-min-entropy must be finite and in (0, lsb-bits]")
     try:

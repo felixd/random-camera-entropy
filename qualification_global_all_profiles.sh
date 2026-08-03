@@ -36,6 +36,7 @@ steps=(
   "dual-weave-lags|smoke_dual_weave_lags.sh"
   "dual-weave-stagger-qualification|qualification_dual_weave_stagger.sh"
   "lsb-campaign|smoke_lsb_profiles.sh"
+  "production-review|qualification_for_review.sh"
 )
 
 failures=0

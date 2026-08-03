@@ -72,7 +72,7 @@ done
 [[ "$SOURCE_TYPE" =~ ^(v4l2|tls-y|rtsp|dataset-y)$ ]] || fail "SOURCE_TYPE=v4l2, tls-y, rtsp albo dataset-y"
 [[ "$SAMPLE_MODE" =~ ^(xor|direct|delta)$ ]] || fail "SAMPLE_MODE=xor, direct albo delta"
 [[ "$LSB_BITS" =~ ^[0-9]+$ ]] || fail "LSB_BITS musi być liczbą całkowitą"
-(( LSB_BITS >= 1 && LSB_BITS <= 8 )) || fail "LSB_BITS musi być w zakresie 1..8"
+(( LSB_BITS >= 1 && LSB_BITS <= 4 )) || fail "LSB_BITS musi być w zakresie 1..4"
 awk -v c="$ENTROPY_CREDIT_BITS_PER_PIXEL" -v b="$LSB_BITS" 'BEGIN{exit !(c>0 && c<=b)}' || fail "ENTROPY_CREDIT_BITS_PER_PIXEL musi być w (0, LSB_BITS]"
 [[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
 [[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"

@@ -4,7 +4,7 @@
 The frozen pixel mask remains calibrated from the historical temporal XOR of
 bit plane zero.  This module only changes which sample bits are serialized
 behind that mask.  That separation preserves backwards-compatible mask and
-health behaviour while allowing controlled 1..8 LSB experiments.
+health behaviour while allowing controlled 1..4 LSB experiments.
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ class Serializer(Protocol):
 
 def validate_lsb_bits(lsb_bits: int) -> int:
     value = int(lsb_bits)
-    if not 1 <= value <= 8:
-        raise ValueError("lsb_bits must be in 1..8")
+    if not 1 <= value <= 4:
+        raise ValueError("lsb_bits must be in 1..4")
     return value
 
 

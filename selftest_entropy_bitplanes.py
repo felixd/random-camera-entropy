@@ -25,7 +25,7 @@ def main() -> int:
 
     assert sample_values(current, previous, "xor", 4).tolist() == [[1, 2], [4, 15]]
     assert sample_values(current, previous, "direct", 2).tolist() == [[0, 3], [2, 3]]
-    assert sample_values(current, previous, "delta", 8).tolist() == [[255, 2], [4, 15]]
+    assert sample_values(current, previous, "delta", 4).tolist() == [[15, 2], [4, 15]]
 
     symbols = serialize_sample_symbols(
         current, previous, RowMajor(), mask, "direct", 2
@@ -37,8 +37,8 @@ def main() -> int:
     assert serialize_symbol_bits(symbols, 2).tolist() == bits.tolist()
     assert BIT_ORDER == "pixel-major-lsb-first"
     assert minimum_conditioner_input_bits(1, 1.0) == 512
-    assert minimum_conditioner_input_bits(8, 1.0) == 4096
-    assert minimum_conditioner_input_bits(8, 0.25) == 16384
+    assert minimum_conditioner_input_bits(4, 1.0) == 2048
+    assert minimum_conditioner_input_bits(4, 0.25) == 8192
     print("entropy bit-plane self-test: PASS")
     return 0
 

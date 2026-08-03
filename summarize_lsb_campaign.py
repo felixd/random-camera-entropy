@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build the comparison report for the exhaustive 1..8 LSB campaign.
+"""Build the comparison report for the exhaustive 1..4 LSB campaign.
 
 Throughput fields come from the terminal worker report.  Empirical entropy-rate
 fields are diagnostics calculated from one dataset; they are not SP 800-90B
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.10.0"
+APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.11.0"
 
 
 def read_json(path: Path) -> dict[str, Any]:

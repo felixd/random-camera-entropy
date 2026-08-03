@@ -87,6 +87,7 @@ ALLOWED_PROFILES = {
     "dual-weave-lags": "smoke_dual_weave_lags.sh",
     "dual-weave-stagger-qualification": "qualification_dual_weave_stagger.sh",
     "lsb-campaign": "smoke_lsb_profiles.sh",
+    "production-review": "qualification_for_review.sh",
     "global-all": "qualification_global_all_profiles.sh",
 }
 
@@ -112,12 +113,14 @@ PROFILE_LABELS = {
     "dual-weave-stagger2": "Dual weave — row-major / stagger-2",
     "dual-weave-lags": "Dual weave — kampania lagów",
     "dual-weave-stagger-qualification": "Dual weave — kwalifikacja stagger-2",
-    "lsb-campaign": "LSB — pełna kampania 1..8 bitów",
+    "lsb-campaign": "LSB — pełna kampania 1..4 bitów",
+    "production-review": "PRODUCTION REVIEW — kompleksowy raport do decyzji",
     "global-all": "GLOBAL — wszystkie profile i kampanie",
 }
 
 PROFILE_HELP = {
-    "lsb-campaign": "Porównuje temporal XOR, bezpośrednie Y i delta dla 1..8 dolnych bitów; generuje wspólne podsumowanie.",
+    "lsb-campaign": "Porównuje temporal XOR, bezpośrednie Y i delta dla 1..4 dolnych bitów; generuje wspólne podsumowanie.",
+    "production-review": "Kompleksowa macierz: tryby i 1–4 LSB, lagi, rozmiary wejścia SHA3, maski/fazy, serializacja i offsety. Wynik to jeden review_report.html z pełnymi parametrami i wykresami.",
     "global-all": "Uruchamia kolejno każdy wcześniejszy profil WWW oraz pełną kampanię LSB. Kontynuuje po błędach i zapisuje raport zbiorczy.",
     "spatial-baseline": "Pełna zamrożona maska, brak offsetu, kolejność row-major. Punkt odniesienia.",
     "spatial-checker-even": "Jedna faza szachownicy; usuwa bezpośrednie sąsiedztwo poziome i pionowe.",
@@ -138,7 +141,7 @@ PARAMETER_HELP = {
     "exposure": "Ręczna ekspozycja źródła. Zmiana wpływa na fizykę źródła i wymaga nowej kalibracji.",
     "pair_lag_frames": "Odstęp czasowy k pomiędzy ramkami. To nie jest odległość pomiędzy pikselami.",
     "sample_mode": "xor = czasowy XOR, direct = dolne bity bieżącej klatki Y, delta = reszta Y_t-Y_(t-k) modulo 256.",
-    "lsb_bits": "Liczba pobieranych dolnych bitów próbki: 1..8. Więcej danych nie oznacza automatycznie takiej samej liczby bitów entropii.",
+    "lsb_bits": "Liczba pobieranych dolnych bitów próbki: 1..4. Więcej danych nie oznacza automatycznie takiej samej liczby bitów entropii.",
     "entropy_credit_bits_per_pixel": "Konserwatywny budżet entropii na wybrany piksel. Jest niezależny od lsb_bits i musi wynikać z oceny źródła.",
     "spatial_sampling": "Starsza opcja zgodności. Jest używana tylko przy spatial_mask_pattern=legacy.",
     "spatial_mask_pattern": "Właściwa maska produkcyjna: legacy, full, checkerboard, grid albo block.",
@@ -475,7 +478,7 @@ class JobManager:
         warmup = self._positive_int(payload, "warmup_seconds", 0, 86_400)
         calibration = self._positive_int(payload, "calibration_pairs", 32, 1_000_000)
         pair_lag = self._positive_int(payload, "pair_lag_frames", 1, 4096)
-        lsb_bits = self._positive_int(payload, "lsb_bits", 1, 8)
+        lsb_bits = self._positive_int(payload, "lsb_bits", 1, 4)
         sample_mode = str(payload.get("sample_mode", "")).strip()
         if sample_mode and sample_mode not in {"xor", "direct", "delta"}:
             raise ValueError("sample_mode must be xor, direct or delta")
@@ -613,7 +616,7 @@ class JobManager:
                 env[env_name] = str(mib * MIB)
 
         slug = f"web-{profile}-{timestamp_slug()}-{job_id[:8]}"
-        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "global-all"}:
+        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "production-review", "global-all"}:
             env["CAMPAIGN"] = slug
             output_root = self.settings.data_root / slug
         else:

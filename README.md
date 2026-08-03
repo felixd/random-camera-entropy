@@ -3,7 +3,7 @@
 
 ## Poprawki kampanii wielobitowego LSB v7.10.0
 
-- RCT i APT są wykonywane na oryginalnych symbolach źródłowych `1..8` bitów na piksel, a nie na sztucznie serializowanym strumieniu bitplane.
+- RCT i APT są wykonywane na oryginalnych symbolach źródłowych `1..4` bitów na piksel, a nie na sztucznie serializowanym strumieniu bitplane.
 - APT używa okna 1024 próbek dla źródła binarnego oraz 512 próbek dla źródeł wielosymbolowych, zgodnie z SP 800-90B.
 - Nieudany przebieg zachowuje dane częściowe i generuje `run_report.html`, analizy BIN oraz bezpośrednie odsyłacze do przyczyny i logu.
 - Raport kampanii porównuje przepustowości lifetime, pokazuje podstawę pomiaru oraz relację `SHA3 / credited entropy`.
@@ -785,7 +785,7 @@ Zamrożona aktywna maska jest zawsze kalibrowana na czasowym XOR bitu `LSB0`, ab
 ```bash
 SAMPLE_MODE=xor    LSB_BITS=2 ENTROPY_CREDIT_BITS_PER_PIXEL=0.5 ./run_one.sh
 SAMPLE_MODE=direct LSB_BITS=4 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=8192 ./run_one.sh
-SAMPLE_MODE=delta  LSB_BITS=8 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=16384 ./run_one.sh
+SAMPLE_MODE=delta  LSB_BITS=4 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=8192 ./run_one.sh
 ```
 
 Bity są zapisywane w kolejności `pixel-major-lsb-first`: dla każdego wybranego piksela najpierw `b0`, potem `b1` itd. `ENTROPY_CREDIT_BITS_PER_PIXEL` jest niezależny od liczby pobieranych bitów. To konserwatywny parametr pochodzący z zewnętrznej oceny źródła, a nie wartość dowiedziona przez ENT, Dieharder lub raport. Serwer odrzuca blok wejściowy SHA3-512, który przy zadanym kredycie wypuszczałby więcej bitów, niż wolno zaliczyć.
@@ -793,7 +793,7 @@ Bity są zapisywane w kolejności `pixel-major-lsb-first`: dla każdego wybraneg
 Pełne kampanie:
 
 ```bash
-./smoke_lsb_profiles.sh                 # xor/direct/delta × 1..8 LSB, łącznie 24 przebiegi
+./smoke_lsb_profiles.sh                 # xor/direct/delta × 1..4 LSB, łącznie 12 przebiegów
 ./qualification_global_all_profiles.sh # wszystkie wcześniejsze profile WWW + kampania LSB
 ```
 

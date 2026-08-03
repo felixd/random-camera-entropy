@@ -41,10 +41,10 @@ label{display:block;margin:10px 0 5px;color:var(--muted);font-size:.84rem}.field
   </div>
   <div class="row">
     <div class="field"><label class="field-label" for="sample_mode">Tryb próbki Y</label><select id="sample_mode" name="sample_mode"><option value="xor">temporal XOR</option><option value="direct">direct Y</option><option value="delta">temporal delta</option></select></div>
-    <div class="field"><label class="field-label" for="lsb_bits">Liczba LSB</label><input id="lsb_bits" name="lsb_bits" type="number" min="1" max="8" value="1"></div>
+    <div class="field"><label class="field-label" for="lsb_bits">Liczba LSB</label><input id="lsb_bits" name="lsb_bits" type="number" min="1" max="4" value="1"></div>
   </div>
   <div class="row">
-    <div class="field"><label class="field-label" for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="any" inputmode="decimal" value="1.0"></div>
+    <div class="field"><label class="field-label" for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="4" step="any" inputmode="decimal" value="1.0"></div>
     <div class="field"><label class="field-label" for="conditioner_input_bits">Conditioner input [bit]</label><input id="conditioner_input_bits" name="conditioner_input_bits" type="number" min="512" step="8" value="2048"></div>
   </div>
   <div class="row">
