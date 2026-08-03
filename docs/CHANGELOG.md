@@ -1,3 +1,10 @@
+## 7.9.2 — 2026-08-03
+
+- zintegrowano w pełnym drzewie projektu ciągły warm-up agenta USB, rejestrator Y8/LSB, aktywne źródło `dataset-y`, względne `data/frame-buffer-latest` oraz poprawki startu jobów bez HTTP 500;
+- poprawiono pole `Entropy credit`: wartość `1,0` w polskiej lokalizacji przeglądarki nie jest już odrzucana przez błędną bazę kroku HTML;
+- formularz normalizuje wszystkie pola liczbowe przez `valueAsNumber`, a backend dodatkowo akceptuje przecinek dziesiętny od starszych klientów API;
+- ujednolicono wersje komponentów do `7.9.2`.
+
 ## 7.9.0 — 2026-08-02
 
 - dodano `--lsb-bits 1..8` oraz `--sample-mode xor|direct|delta`;

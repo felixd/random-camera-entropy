@@ -44,7 +44,7 @@ label{display:block;margin:10px 0 5px;color:var(--muted);font-size:.84rem}.field
     <div class="field"><label class="field-label" for="lsb_bits">Liczba LSB</label><input id="lsb_bits" name="lsb_bits" type="number" min="1" max="8" value="1"></div>
   </div>
   <div class="row">
-    <div class="field"><label class="field-label" for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="0.01" value="1.0"></div>
+    <div class="field"><label class="field-label" for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="any" inputmode="decimal" value="1.0"></div>
     <div class="field"><label class="field-label" for="conditioner_input_bits">Conditioner input [bit]</label><input id="conditioner_input_bits" name="conditioner_input_bits" type="number" min="512" step="8" value="2048"></div>
   </div>
   <div class="row">
@@ -123,7 +123,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function showError(message){const box=el('error');box.textContent=message;box.style.display=message?'block':'none'}
 function card(label,value,cls=''){return `<div class="card"><span>${esc(label)}</span><b class="${cls}">${esc(value)}</b></div>`}
 async function api(url,options={}){options.headers={...(options.headers||{}),'X-CSRF-Token':csrf};const r=await fetch(url,options);const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data={error:text}}if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);return data}
-function serializeForm(form){const fd=new FormData(form),obj={};for(const [k,v] of fd.entries()){if(['web_images','mask_snapshot_images','live_byte_diagnostics'].includes(k))continue;if(v!=='')obj[k]=v}obj.web_images=form.elements.web_images.checked;obj.mask_snapshot_images=form.elements.mask_snapshot_images.checked;obj.live_byte_diagnostics=form.elements.live_byte_diagnostics.checked;return obj}
+function serializeForm(form){const fd=new FormData(form),obj={};for(const [k,v] of fd.entries()){if(['web_images','mask_snapshot_images','live_byte_diagnostics'].includes(k)||v==='')continue;const field=form.elements[k];if(field instanceof HTMLInputElement&&field.type==='number'){if(!field.validity.valid)throw new Error(`${field.labels?.[0]?.textContent?.trim()||k}: ${field.validationMessage}`);const number=field.valueAsNumber;if(!Number.isFinite(number))throw new Error(`${field.labels?.[0]?.textContent?.trim()||k}: podaj prawidłową liczbę`);obj[k]=String(number)}else obj[k]=v}obj.web_images=form.elements.web_images.checked;obj.mask_snapshot_images=form.elements.mask_snapshot_images.checked;obj.live_byte_diagnostics=form.elements.live_byte_diagnostics.checked;return obj}
 function setValue(form,name,value){if(form.elements[name])form.elements[name].value=String(value)}
 const spatialPresets={
   'spatial-baseline':['full',1,1,0,0,4,4,0,0,'row-major',16,16],

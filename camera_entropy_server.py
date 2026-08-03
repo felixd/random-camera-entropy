@@ -66,7 +66,7 @@ from entropy_bitplanes import (
 )
 from unicode_image_text import UnicodeTextCanvas, font_description
 
-APP_VERSION = "2026.08.02.camera-entropy-distributed.7.9.0"
+APP_VERSION = "2026.08.03.camera-entropy-distributed.7.9.2"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"

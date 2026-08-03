@@ -1,4 +1,4 @@
-# Camera Entropy Distributed v7.9.0
+# Camera Entropy Distributed v7.9.2
 
 
 ## Korelacja przestrzenna, maski i dokumentacja v7.9.0

@@ -58,6 +58,9 @@ def main() -> int:
     ):
         assert marker in template, marker
     assert 'id="contextHelp"' not in template
+    assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="any" inputmode="decimal"' in template
+    assert "field.valueAsNumber" in template
+    assert "Number.isFinite(number)" in template
 
     for name in (
         "spatial_mask_pattern", "spatial_step_x", "spatial_step_y",
@@ -123,6 +126,12 @@ def main() -> int:
         assert env["SAMPLE_MODE"] == "delta"
         assert env["LSB_BITS"] == "4"
         assert env["ENTROPY_CREDIT_BITS_PER_PIXEL"] == "0.5"
+
+        comma_payload = dict(payload, entropy_credit_bits_per_pixel="0,5")
+        comma_env, _, _ = manager._build_environment(
+            comma_payload, sources[0], "single", "comma-credit-test"
+        )
+        assert comma_env["ENTROPY_CREDIT_BITS_PER_PIXEL"] == "0.5"
         assert slug.startswith("web-spatial-grid4-") and output.name == slug
 
         campaign_env, campaign_slug, campaign_output = manager._build_environment(

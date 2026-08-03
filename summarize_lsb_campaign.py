@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "2026.08.02.camera-entropy-lsb-campaign.7.9.0"
+APP_VERSION = "2026.08.03.camera-entropy-lsb-campaign.7.9.2"
 
 
 def read_json(path: Path) -> dict[str, Any]:

@@ -1,0 +1,12 @@
+{
+  "version": "2026.08.03.camera-entropy-distributed.7.9.2",
+  "base_archive": "random-camera-entropy-dev(2).zip",
+  "features": [
+    "continuous USB camera warm-up with source uptime metadata",
+    "Y8 or packed-LSB frame recorder with live dataset publication",
+    "dataset-y replay and follow mode for active or stopped datasets",
+    "relative data/frame-buffer-latest source path",
+    "dataset preflight and race-free control-server job startup",
+    "localized decimal entropy-credit input fix"
+  ]
+}
