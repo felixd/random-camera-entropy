@@ -67,8 +67,11 @@ from entropy_bitplanes import (
     serialize_symbol_bits,
 )
 from unicode_image_text import UnicodeTextCanvas, font_description
+from masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelMonitor
+from entropy_extractors import repeated_von_neumann, von_neumann_split
+from stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.03.camera-entropy-distributed.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-distributed.7.12.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -156,7 +159,11 @@ def canonical_spatial_sampling(name: str) -> str:
 
 def entropy_pipeline_name(args: argparse.Namespace) -> str:
     mode = {"xor": "temporal-xor", "direct": "direct-y", "delta": "temporal-delta"}[args.sample_mode]
-    tail = "mask-symbol-health-sha3" if not args.von_neumann_stage else "mask-symbol-health-vn-and-sha3"
+    tail = (
+        "mask-symbol-health-sha3"
+        if not args.von_neumann_stage
+        else f"mask-symbol-health-vn{args.von_neumann_passes}-and-sha3"
+    )
     return f"{mode}-lsb{args.lsb_bits}-{tail}"
 
 
@@ -393,226 +400,6 @@ class ContinuousHealthTests:
             "apt_cutoff": self.apt_cutoff,
             "apt_window": self.apt_window,
         }
-
-
-class FrozenPixelCalibrator:
-    """Learn per-pixel behavior for N frame pairs, then freeze the active mask."""
-
-    def __init__(self, shape: tuple[int, int], target_pairs: int, args: argparse.Namespace) -> None:
-        self.shape = shape
-        self.target = target_pairs
-        self.args = args
-        self.pairs = 0
-        self.ones = np.zeros(shape, dtype=np.uint32)
-        self.transitions = np.zeros(shape, dtype=np.uint32)
-        self.clips = np.zeros(shape, dtype=np.uint32)
-        self.previous_change: Optional[np.ndarray] = None
-        self.mask: Optional[np.ndarray] = None
-        self.reason_code: Optional[np.ndarray] = None
-        self.p1_rate: Optional[np.ndarray] = None
-        self.transition_rate: Optional[np.ndarray] = None
-        self.clip_rate: Optional[np.ndarray] = None
-
-    @property
-    def ready(self) -> bool:
-        return self.mask is not None
-
-    def update(self, change: np.ndarray, y: np.ndarray, previous_y: np.ndarray) -> None:
-        if self.ready:
-            return
-        self.ones += change
-        if self.previous_change is not None:
-            self.transitions += np.not_equal(change, self.previous_change)
-        clipped = (
-            (y <= self.args.clip_low)
-            | (y >= self.args.clip_high)
-            | (previous_y <= self.args.clip_low)
-            | (previous_y >= self.args.clip_high)
-        )
-        self.clips += clipped
-        self.previous_change = change.copy()
-        self.pairs += 1
-        if self.pairs >= self.target:
-            self.freeze()
-
-    def freeze(self) -> None:
-        self.p1_rate = self.ones.astype(np.float32) / max(1, self.pairs)
-        self.transition_rate = self.transitions.astype(np.float32) / max(1, self.pairs - 1)
-        self.clip_rate = self.clips.astype(np.float32) / max(1, self.pairs)
-
-        p_ok = (self.p1_rate >= self.args.mask_p1_min) & (self.p1_rate <= self.args.mask_p1_max)
-        transition_ok = (
-            (self.transition_rate >= self.args.mask_transition_min)
-            & (self.transition_rate <= self.args.mask_transition_max)
-        )
-        clip_ok = self.clip_rate <= self.args.mask_clip_max
-        self.mask = p_ok & transition_ok & clip_ok
-
-        reason = np.zeros(self.shape, dtype=np.uint8)
-        reason[~p_ok] |= 1
-        reason[~transition_ok] |= 2
-        reason[~clip_ok] |= 4
-        self.reason_code = reason
-
-    def report(self) -> dict[str, Any]:
-        eligible = int(self.mask.sum()) if self.mask is not None else 0
-        total = int(np.prod(self.shape))
-        return {
-            "pairs": self.pairs,
-            "target": self.target,
-            "ready": self.ready,
-            "eligible_pixels": eligible,
-            "eligible_rate": eligible / total if total else 0.0,
-        }
-
-
-@dataclass
-class MaskComparison:
-    active_pixels: int = 0
-    shadow_pixels: int = 0
-    overlap_pixels: int = 0
-    union_pixels: int = 0
-    active_retention: float = 0.0
-    shadow_retention: float = 0.0
-    jaccard: float = 0.0
-    disagreement_rate: float = 0.0
-    updates: int = 0
-    grace_remaining: int = 0
-    bad_streak: int = 0
-    bad: bool = False
-    latched: bool = False
-    details: str = ""
-
-
-class ShadowPixelMonitor:
-    """Continuously track a dynamic mask without using it to select output."""
-
-    def __init__(
-        self,
-        active_mask: np.ndarray,
-        initial_p1: np.ndarray,
-        initial_transition: np.ndarray,
-        initial_clip: np.ndarray,
-        previous_change: np.ndarray,
-        args: argparse.Namespace,
-    ) -> None:
-        self.active_mask = active_mask
-        self.args = args
-        self.alpha = 1.0 - math.pow(0.5, 1.0 / args.shadow_half_life_pairs)
-        self.p1 = initial_p1.astype(np.float32, copy=True)
-        self.transition = initial_transition.astype(np.float32, copy=True)
-        self.clip = initial_clip.astype(np.float32, copy=True)
-        self.previous_change = previous_change.copy()
-        self.mask = active_mask.copy()
-        self.updates = 0
-        self.bad_streak = 0
-        self.latched = False
-        self.last_details = ""
-        self.comparison = self._compare()
-
-    def _derive_mask(self) -> np.ndarray:
-        p_ok = (self.p1 >= self.args.mask_p1_min) & (self.p1 <= self.args.mask_p1_max)
-        transition_ok = (
-            (self.transition >= self.args.mask_transition_min)
-            & (self.transition <= self.args.mask_transition_max)
-        )
-        clip_ok = self.clip <= self.args.mask_clip_max
-        return p_ok & transition_ok & clip_ok
-
-    def _compare(self) -> MaskComparison:
-        active = self.active_mask
-        shadow = self.mask
-        active_pixels = int(active.sum())
-        shadow_pixels = int(shadow.sum())
-        overlap = int(np.count_nonzero(active & shadow))
-        union = int(np.count_nonzero(active | shadow))
-        disagreement = int(np.count_nonzero(active ^ shadow))
-        total = int(active.size)
-        active_retention = overlap / active_pixels if active_pixels else 0.0
-        shadow_retention = overlap / shadow_pixels if shadow_pixels else 0.0
-        jaccard = overlap / union if union else 1.0
-        grace_remaining = max(0, self.args.shadow_grace_pairs - self.updates)
-        bad = (
-            grace_remaining == 0
-            and (
-                active_retention < self.args.shadow_min_active_retention
-                or jaccard < self.args.shadow_min_jaccard
-            )
-        )
-        details = (
-            f"active_retention={active_retention:.6f} "
-            f"(min={self.args.shadow_min_active_retention:.6f}), "
-            f"jaccard={jaccard:.6f} (min={self.args.shadow_min_jaccard:.6f}), "
-            f"disagreement={disagreement / total if total else 0.0:.6f}"
-        )
-        return MaskComparison(
-            active_pixels=active_pixels,
-            shadow_pixels=shadow_pixels,
-            overlap_pixels=overlap,
-            union_pixels=union,
-            active_retention=active_retention,
-            shadow_retention=shadow_retention,
-            jaccard=jaccard,
-            disagreement_rate=disagreement / total if total else 0.0,
-            updates=self.updates,
-            grace_remaining=grace_remaining,
-            bad_streak=self.bad_streak,
-            bad=bad,
-            latched=self.latched,
-            details=details,
-        )
-
-    def update(self, change: np.ndarray, y: np.ndarray, previous_y: np.ndarray) -> tuple[MaskComparison, bool]:
-        clipped = (
-            (y <= self.args.clip_low)
-            | (y >= self.args.clip_high)
-            | (previous_y <= self.args.clip_low)
-            | (previous_y >= self.args.clip_high)
-        )
-        transition_sample = np.not_equal(change, self.previous_change)
-        alpha = np.float32(self.alpha)
-        self.p1 += alpha * (change.astype(np.float32) - self.p1)
-        self.transition += alpha * (transition_sample.astype(np.float32) - self.transition)
-        self.clip += alpha * (clipped.astype(np.float32) - self.clip)
-        self.previous_change = change.copy()
-        self.updates += 1
-
-        recomputed = self.updates % self.args.shadow_update_every == 0
-        just_latched = False
-        if recomputed:
-            self.mask = self._derive_mask()
-            comparison = self._compare()
-            if comparison.bad:
-                self.bad_streak += 1
-            else:
-                self.bad_streak = 0
-            if (
-                not self.latched
-                and self.args.shadow_stop_on_drift
-                and self.bad_streak >= self.args.shadow_fail_consecutive
-            ):
-                self.latched = True
-                just_latched = True
-                self.last_details = comparison.details
-            comparison = self._compare()
-            comparison.bad_streak = self.bad_streak
-            comparison.latched = self.latched
-            self.comparison = comparison
-        return self.comparison, just_latched
-
-
-
-def von_neumann_split(bits: np.ndarray) -> np.ndarray:
-    """Pair spatially separated halves: 01->0, 10->1, equal pairs discarded."""
-    even_length = (bits.size // 2) * 2
-    if even_length == 0:
-        return np.empty(0, dtype=np.uint8)
-    half = even_length // 2
-    first = bits[:half]
-    second = bits[half : half * 2]
-    different = first != second
-    return first[different].astype(np.uint8, copy=False)
-
 
 
 def parse_positive_int_list(value: str) -> tuple[int, ...]:
@@ -2271,6 +2058,10 @@ class Service:
 
         self.output_dir = Path(args.output_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.stream_lsb_summary_path = self.output_dir / "stream_lsb_summary.json"
+        self.stream_lsb_statistics = StreamingBitplaneStatistics(
+            args.lsb_bits, args.stream_stats_window_pairs
+        )
         self.byte_diagnostics = LiveByteDiagnostics(
             args.live_byte_diagnostics,
             self.output_dir,
@@ -2285,7 +2076,11 @@ class Service:
             ("temporal_masked", "Temporal XOR — aktywna maska", 20),
         ]
         if args.von_neumann_stage:
-            diagnostic_stages.append(("von_neumann", "Von Neumann — wyjście", 30))
+            diagnostic_stages.append((
+                "von_neumann",
+                f"Von Neumann ×{args.von_neumann_passes} — wyjście",
+                30,
+            ))
         diagnostic_stages.append(("sha3_512", "SHA3-512 — wyjście", 40))
         for key, label, rank in diagnostic_stages:
             self.byte_diagnostics.register(key, label, rank, "main")
@@ -2648,7 +2443,7 @@ class Service:
     def state(self) -> str:
         if self.error:
             return "ERROR"
-        if self.output_limit_reached:
+        if self.output_limit_reached and self.args.exit_on_output_limit:
             return "OUTPUT_COMPLETE"
         if self.health.latched:
             return "HEALTH_FAILED"
@@ -2743,6 +2538,8 @@ class Service:
                 "mask_snapshot_images": self.args.mask_snapshot_images,
                 "web_images": self.args.web_images,
                 "von_neumann_stage": self.args.von_neumann_stage,
+                "von_neumann_passes": self.args.von_neumann_passes,
+                "stream_stats_window_pairs": self.args.stream_stats_window_pairs,
                 "pipeline": entropy_pipeline_name(self.args),
                 "sample_mode": self.args.sample_mode,
                 "lsb_bits": self.args.lsb_bits,
@@ -2774,9 +2571,28 @@ class Service:
             json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
-    def write_output_complete_report(self) -> None:
+    def write_stream_lsb_summary(self) -> dict[str, Any]:
+        summary = self.stream_lsb_statistics.snapshot(finalize_partial_window=True)
+        summary.update({
+            "app_version": APP_VERSION,
+            "generated_utc": utc_timestamp(),
+            "sample_mode": self.args.sample_mode,
+            "pairing_mode": self.args.pairing_mode,
+            "pair_lag_frames": self.args.pair_lag_frames,
+            "spatial_mask_pattern": self.args.spatial_mask_pattern,
+            "spatial_sampling": self.args.spatial_sampling,
+            "serialization_order": self.args.serialization_order,
+        })
+        self.stream_lsb_summary_path.write_text(
+            json.dumps(json_safe(summary), indent=2, ensure_ascii=False, allow_nan=False),
+            encoding="utf-8",
+        )
+        return summary
+
+    def write_output_complete_report(self, reason: str = "output-targets-reached") -> None:
         # A run directory must have exactly one terminal marker.
         self.run_failed_path.unlink(missing_ok=True)
+        stream_lsb = self.write_stream_lsb_summary()
         self.camera_controls_final = (
             self.source.control_snapshot()
             if self.source is not None and self.source.supports_controls
@@ -2784,6 +2600,8 @@ class Service:
         )
         report = {
             "status": "complete",
+            "completion_reason": reason,
+            "targets_complete": self.all_output_writers_complete(),
             "timestamp_utc": utc_timestamp(),
             "app_version": APP_VERSION,
             "device": self.device,
@@ -2828,6 +2646,7 @@ class Service:
             "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
             "mask_calibration_source": "temporal-xor-lsb0",
             "von_neumann_stage": self.args.von_neumann_stage,
+            "von_neumann_passes": self.args.von_neumann_passes,
             "web_images": self.args.web_images,
             "mask_snapshot_images": self.args.mask_snapshot_images,
             "conditioner": self.conditioner.status(),
@@ -2866,6 +2685,12 @@ class Service:
             if self.calibrator and self.calibrator.mask is not None
             else 0,
             "health": self.health.status(),
+            "stream_lsb_statistics": {
+                "file": self.stream_lsb_summary_path.name,
+                "aggregate_hmin_per_input_bit": stream_lsb.get("aggregate", {}).get("symbol_min_entropy_bits_per_input_bit"),
+                "worst_window_hmin_per_input_bit": stream_lsb.get("worst_window_hmin_per_input_bit"),
+                "window_count": stream_lsb.get("window_count"),
+            },
             "shadow": (asdict(self.shadow.comparison) | {"bad_seen": self.shadow_bad_seen}) if self.shadow else {"bad_seen": self.shadow_bad_seen},
         }
         self.output_complete_path.write_text(
@@ -2876,6 +2701,7 @@ class Service:
         # Fail-closed takes precedence, including when a target was reached in
         # the same pair. Never leave a contradictory completion marker behind.
         self.output_complete_path.unlink(missing_ok=True)
+        stream_lsb = self.write_stream_lsb_summary()
         self.camera_controls_final = (
             self.source.control_snapshot()
             if self.source is not None and self.source.supports_controls
@@ -2914,6 +2740,7 @@ class Service:
             "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
             "mask_calibration_source": "temporal-xor-lsb0",
             "von_neumann_stage": self.args.von_neumann_stage,
+            "von_neumann_passes": self.args.von_neumann_passes,
             "web_images": self.args.web_images,
             "mask_snapshot_images": self.args.mask_snapshot_images,
             "conditioner": self.conditioner.status(),
@@ -2942,6 +2769,12 @@ class Service:
             if self.calibrator and self.calibrator.mask is not None
             else 0,
             "health": self.health.status(),
+            "stream_lsb_statistics": {
+                "file": self.stream_lsb_summary_path.name,
+                "aggregate_hmin_per_input_bit": stream_lsb.get("aggregate", {}).get("symbol_min_entropy_bits_per_input_bit"),
+                "worst_window_hmin_per_input_bit": stream_lsb.get("worst_window_hmin_per_input_bit"),
+                "window_count": stream_lsb.get("window_count"),
+            },
             "shadow": (asdict(self.shadow.comparison) | {"bad_seen": self.shadow_bad_seen}) if self.shadow else {"bad_seen": self.shadow_bad_seen},
         }
         self.run_failed_path.write_text(
@@ -3225,6 +3058,7 @@ class Service:
                     "web_images": self.args.web_images,
                     "mask_snapshot_images": self.args.mask_snapshot_images,
                     "von_neumann_stage": self.args.von_neumann_stage,
+            "von_neumann_passes": self.args.von_neumann_passes,
                     "pairing_mode": self.args.pairing_mode,
                     "pair_lag_frames": self.args.pair_lag_frames,
                     "spatial_sampling": self.args.spatial_sampling,
@@ -3443,6 +3277,18 @@ class Service:
                 pair = self.pair_scheduler.push(captured)
                 if pair is not None:
                     self.process_pair(pair[0], pair[1])
+        except EOFError as exc:
+            if self.source is not None and self.source.source_type == "dataset-y":
+                self.logger.info("Dataset exhausted normally: %s", exc)
+                try:
+                    self.write_correlation_summary()
+                    self.write_output_complete_report("dataset-exhausted")
+                except Exception:
+                    self.logger.exception("cannot finalize dataset-exhausted report")
+                    raise
+                self.request_process_exit("dataset exhausted")
+                return
+            raise
         except Exception as exc:
             if self.stop_event.is_set():
                 self.logger.info("source loop stopped during service shutdown: %s", exc)
@@ -3881,6 +3727,9 @@ class Service:
                     if not self.args.continue_output_after_health_failure:
                         failure_reason = f"{test}:{variant}: {details}"
 
+                if variant == "full" and not health.latched:
+                    self.stream_lsb_statistics.observe(symbols_for_variant, frame_id, timestamp)
+
                 if variant == "full" and self.conditioner.enabled and not health.latched:
                     conditioner_before = self.conditioner.written_bytes
                     conditioner_status = self.conditioner.write_bits(bits_for_variant)
@@ -3899,8 +3748,11 @@ class Service:
                 bytes_this_pair = 0
                 before_pending = int(writer.pending.size)
                 after_pending = before_pending
+                vn_pass_metrics: list[dict[str, float | int]] = []
                 if self.args.von_neumann_stage and (not health.latched or self.args.continue_output_after_health_failure):
-                    generated = von_neumann_split(bits_for_variant)
+                    generated, vn_pass_metrics = repeated_von_neumann(
+                        bits_for_variant, self.args.von_neumann_passes
+                    )
                     if generated.size:
                         accepted_count, bytes_this_pair, after_pending, _ = writer.write_bits(generated)
                         accepted = generated[:accepted_count]
@@ -3918,6 +3770,8 @@ class Service:
                     "selected_p1": selected_ones / bits_for_variant.size if bits_for_variant.size else 0.0,
                     "vn_output_bits": int(accepted.size),
                     "vn_efficiency": accepted.size / bits_for_variant.size if bits_for_variant.size else 0.0,
+                    "vn_passes": self.args.von_neumann_passes,
+                    "vn_pass_metrics": vn_pass_metrics if self.args.von_neumann_stage else [],
                     "bytes_written_this_pair": bytes_this_pair,
                     "written_bytes": writer.written_bytes,
                     "complete": writer.completed,
@@ -4105,15 +3959,22 @@ class Service:
 
         if self.all_output_writers_complete() and not self.output_limit_reached:
             self.output_limit_reached = True
-            self.write_correlation_summary()
-            self.write_output_complete_report()
-            self.logger.info(
-                "All output targets reached: spatial=%s conditioned=%s",
-                {name: writer.written_bytes for name, writer in self.spatial_variant_writers.items()},
-                self.conditioner.written_bytes,
-            )
+            targets = {name: writer.written_bytes for name, writer in self.spatial_variant_writers.items()}
             if self.args.exit_on_output_limit:
-                self.request_process_exit("output limit reached")
+                self.write_correlation_summary()
+                self.write_output_complete_report()
+                self.logger.info(
+                    "Output targets completed successfully; stopping live capture normally: spatial=%s conditioned=%s",
+                    targets,
+                    self.conditioner.written_bytes,
+                )
+                self.request_process_exit("output targets completed")
+            else:
+                self.logger.info(
+                    "Output targets reached; continuing source processing for full-dataset statistics: spatial=%s conditioned=%s",
+                    targets,
+                    self.conditioner.written_bytes,
+                )
 
     def publish_images(
         self,
@@ -4711,6 +4572,12 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated conditioner alignments: same-group,stagger-1,stagger-2",
     )
     parser.add_argument(
+        "--stream-stats-window-pairs",
+        type=int,
+        default=1024,
+        help="Production frame pairs per complete-dataset streaming statistics window",
+    )
+    parser.add_argument(
         "--correlation-distances",
         type=parse_positive_int_list,
         default=parse_positive_int_list("1,2,3,4,6,8,12,16,24,32,48,64"),
@@ -4794,6 +4661,12 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Run the Von Neumann extractor and optional diagnostic output; disable for the simplified temporal-SHA3 pipeline",
+    )
+    parser.add_argument(
+        "--von-neumann-passes",
+        type=int,
+        default=1,
+        help="Number of consecutive Von Neumann extraction passes (0..4); 0 disables the VN stage",
     )
     parser.add_argument("--output-dir", default="data")
     parser.add_argument("--log-file", type=Path)
@@ -4898,6 +4771,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("conditioned-output-bytes requires --write-conditioned-output")
     if args.correlation_every <= 0:
         parser.error("correlation-every must be positive")
+    if args.stream_stats_window_pairs <= 0:
+        parser.error("stream-stats-window-pairs must be positive")
     if args.mask_snapshot_interval_seconds < 0:
         parser.error("mask-snapshot-interval-seconds cannot be negative")
     if args.mask_drift_history_points < 10:
@@ -4908,6 +4783,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("live-heatmap-max-stages must be in 1..32")
     if args.live_heatmap_min_bytes < 256:
         parser.error("live-heatmap-min-bytes must be >= 256")
+    if not 0 <= args.von_neumann_passes <= 4:
+        parser.error("von-neumann-passes must be in 0..4")
+    if not args.von_neumann_stage:
+        args.von_neumann_passes = 0
+    elif args.von_neumann_passes == 0:
+        args.von_neumann_stage = False
     if args.max_output_bytes and not args.write_output:
         parser.error("max-output-bytes requires --write-output")
     if not args.von_neumann_stage and (args.write_output or args.max_output_bytes):

@@ -1,35 +1,33 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parent
 
 
-def literal_assignment(path: Path, name: str):
-    module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    for node in module.body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == name:
-                    return ast.literal_eval(node.value)
-    raise AssertionError(f"missing assignment {name} in {path}")
-
 
 def main() -> int:
-    profiles = literal_assignment(ROOT / "control_server.py", "ALLOWED_PROFILES")
+    sys.path.insert(0, str(ROOT))
+    from profile_catalog import ALLOWED_PROFILES as profiles
+
     assert isinstance(profiles, dict)
     assert profiles["lsb-campaign"] == "smoke_lsb_profiles.sh"
     assert profiles["global-all"] == "qualification_global_all_profiles.sh"
 
     global_text = (ROOT / "qualification_global_all_profiles.sh").read_text(encoding="utf-8")
     global_steps = dict(re.findall(r'^\s*"([^|]+)\|([^"|]+)"\s*$', global_text, re.MULTILINE))
-    expected = {name: script for name, script in profiles.items() if name != "global-all"}
+    # The final preproduction profile intentionally consumes an entire dataset and
+    # is a separate release gate.  It must not be hidden inside the historical
+    # global campaign, which remains a bounded collection of smoke/qualification runs.
+    global_exclusions = {"global-all", "final-preproduction"}
+    expected = {name: script for name, script in profiles.items() if name not in global_exclusions}
     assert global_steps == expected, (global_steps.keys(), expected.keys())
     assert len(global_steps) == 23
+    assert profiles["final-preproduction"] == "qualification_final_preproduction.py"
 
     for script in profiles.values():
         path = ROOT / script

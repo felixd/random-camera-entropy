@@ -1,3 +1,14 @@
+## 7.12.0 — 2026-08-04
+
+- Added the final pre-production profile using the complete current dataset snapshot.
+- Added parallel dataset-y jobs and per-job worker ports; live sources remain exclusive.
+- Rebuilt the Control Panel around the actual entropy pipeline stages and removed the embedded preview.
+- Extracted mask logic to `masking.py` and extraction helpers to `entropy_extractors.py`.
+- Added 0–4 Von Neumann passes with per-pass retention diagnostics.
+- Added dependency-aware form controls and authoritative server-side validation.
+- Added streaming whole-dataset symbol statistics, including aggregate and worst-window Hmin/bias/lag metrics, without storing an unbounded validation bitstream.
+- Added a standalone final pre-production report with exact case parameters, rate charts and production gates.
+
 ## 7.11.0 — 2026-08-03
 
 - ograniczono wszystkie aktywne profile i walidację do maksymalnie 4 LSB;
@@ -49,16 +60,6 @@
 - usunięto wyścig `os.getpgid(pid)` przy natychmiastowym zakończeniu workera; endpoint startu zwraca teraz JSON zamiast ogólnej strony HTML 500;
 - surowe katalogi `frame-buffer-*` nie są pokazywane jako przebiegi raportowe;
 - dodano testy regresyjne Y8/LSB, zatrzymanego datasetu i procesu kończącego się natychmiast po starcie.
-
-## Unreleased — interfejs operatora
-
-- Pomoc po najechaniu i fokusie jest renderowana jako `position: fixed` obok kursora lub aktywnego pola, więc pozostaje w bieżącym viewport.
-- Kliknięcie parametru, etykiety, opcji albo wartości przypina przewijalne okno pomocy w prawym dolnym rogu.
-- Przypięta pomoc nie znika przy odsunięciu kursora; można ją zamknąć przyciskiem `×` albo klawiszem `Escape`.
-- Aktywny parametr i jego etykieta są wizualnie oznaczane jako przypięte.
-- Nagłówek panelu workera pokazuje szczegóły bieżącego etapu zamiast samej nazwy stanu.
-- Podczas warm-up widoczny jest czas pozostały i pasek postępu; podczas kalibracji numer bieżącej pary, cel i procent.
-- Podczas produkcji oraz po zakończeniu nagłówek pokazuje postęp zapisu SHA3 albo głównego pliku wyjściowego.
 
 ## 7.7.0 — 2026-08-02
 

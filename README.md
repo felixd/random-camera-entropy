@@ -1,5 +1,33 @@
-# Camera Entropy Distributed v7.11.0
+# Camera Entropy Distributed v7.12.0
 
+
+## Final preproduction i uporządkowany Control Panel v7.12.0
+
+- nowy profil `final-preproduction` wykorzystuje snapshot wszystkich aktualnie dostępnych klatek dataset-y i równolegle porównuje pięciu finalistów;
+- rekomendowany tor: temporal XOR, 1 LSB, disjoint, k=4, pełna zamrożona maska, row-major, credit 0.5, SHA3-512 z wejściem 2048 bitów;
+- wariant 1024-bitowy, lag k=2, XOR 2 LSB oraz Direct LSB są wykonywane jako kontrolowane challengery;
+- Control Panel ma pełnoszeroką, siedmioetapową konfigurację pipeline, sticky menu i osobny przycisk podglądu zamiast osadzonego iframe;
+- wiele zadań `dataset-y` może działać równolegle na osobnych portach, źródła LIVE pozostają wyłączne;
+- logika masek została wydzielona do `masking.py`, a ekstraktory do `entropy_extractors.py`;
+- Von Neumann może być wykonany 0–4 razy, z metrykami retencji każdego przejścia;
+- opcje wykluczające się są blokowane w UI i ponownie walidowane w API;
+- pełnodatasetowe statystyki Hmin, biasu, lag-1 i zależności bitplane są liczone strumieniowo dla wszystkich zaakceptowanych symboli, niezależnie od ograniczonego rozmiaru plików walidacyjnych;
+- finalny raport używa bramki dla wyniku zagregowanego i najgorszego kolejnego okna datasetu.
+
+Uruchomienie finalnego testu z terminala:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+DATASET_VERIFY_HASHES=1 \
+./qualification_final_preproduction.py
+```
+
+Wynikiem jest jeden samodzielny plik:
+
+```text
+data/final-preproduction-*/final_preproduction_report.html
+```
 
 ## Kompleksowa kwalifikacja produkcyjna v7.11.0
 
@@ -133,7 +161,7 @@ Za reverse proxy strona jest dostępna pod adresem skonfigurowanym w Nginx, np. 
 - raport `run_report.html` generowany dla każdego ukończonego przebiegu;
 - raport kampanii `qualification_report.html` dla kwalifikacji.
 
-Tylko jeden test może być aktywny jednocześnie dla wspólnego katalogu `data`. Zamknięcie przeglądarki nie przerywa testu.
+Źródła LIVE (`v4l2`, `tls-y`, `rtsp`) pozostają wyłączne. Zadania `dataset-y` są tylko do odczytu i mogą działać równolegle na niezależnych portach workera, do limitu `MAX_DATASET_JOBS`. Zamknięcie przeglądarki nie przerywa testu.
 
 ## Uproszczony tor Temporal SHA3
 

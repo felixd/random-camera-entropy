@@ -164,6 +164,7 @@ def main() -> int:
         assert ALLOWED_PROFILES["dual-weave-stagger2"] == "smoke_dual_weave_stagger2.sh"
         assert ALLOWED_PROFILES["temporal-sha3"] == "smoke_temporal_sha3.sh"
         assert ALLOWED_PROFILES["production-assessment"] == "qualification_production_assessment.py"
+        assert ALLOWED_PROFILES["final-preproduction"] == "qualification_final_preproduction.py"
         loaded_sources = load_sources(sources_path)
         assert loaded_sources[0]["id"] == "local"
         manager = JobManager(settings, loaded_sources, logging.getLogger("control-selftest"))
@@ -180,6 +181,7 @@ def main() -> int:
             loaded_sources[0],
             "dual-weave-stagger2",
             "1234567890abcdef",
+            18087,
         )
         assert env["WEB_IMAGES"] == "0"
         assert env["MASK_SNAPSHOT_IMAGES"] == "0"
@@ -192,11 +194,19 @@ def main() -> int:
 
         dataset_source = next(item for item in loaded_sources if item["id"] == "buffered-latest")
         dataset_env, _, _ = manager._build_environment(
-            {}, dataset_source, "temporal-sha3", "fedcba0987654321"
+            {"dataset_scope": "all-available", "dataset_verify_hashes": True, "stream_stats_window_pairs": 256},
+            dataset_source, "temporal-sha3", "fedcba0987654321", 18088
         )
         assert Path(dataset_env["DATASET_DIR"]) == dataset.resolve()
         assert dataset_env["WIDTH"] == "8"
         assert dataset_env["HEIGHT"] == "4"
+        assert dataset_env["DATASET_SCOPE"] == "all-available"
+        assert dataset_env["DATASET_START_FRAME"] == "0"
+        assert dataset_env["DATASET_MAX_FRAMES"] == "2"
+        assert dataset_env["DATASET_FOLLOW"] == "0"
+        assert dataset_env["EXIT_ON_OUTPUT_LIMIT"] == "0"
+        assert dataset_env["DATASET_VERIFY_HASHES"] == "1"
+        assert dataset_env["STREAM_STATS_WINDOW_PAIRS"] == "256"
 
         assert safe_path(data, "sample/x.json").is_file()
         rows = scan_data_root(data, 20)
@@ -208,6 +218,24 @@ def main() -> int:
             "broken-qualification",
         }
         assert not any(name.startswith("frame-buffer-") for name in names)
+
+        # Read-only dataset jobs may run concurrently and receive independent ports.
+        sleep_script = base / "sleep-dataset.sh"
+        sleep_script.write_text("#!/usr/bin/env bash\nsleep 30\n", encoding="utf-8")
+        sleep_script.chmod(0o755)
+        ALLOWED_PROFILES["selftest-dataset"] = sleep_script.name
+        try:
+            first = manager.start({"profile": "selftest-dataset", "source_id": "buffered-latest", "dataset_scope": "all-available"})
+            second = manager.start({"profile": "selftest-dataset", "source_id": "buffered-latest", "dataset_scope": "all-available"})
+            assert first["worker_port"] != second["worker_port"]
+            assert len(manager.active_jobs()) == 2
+            manager.stop(first["id"]); manager.stop(second["id"])
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline and manager.active_jobs():
+                time.sleep(0.02)
+            assert not manager.active_jobs()
+        finally:
+            ALLOWED_PROFILES.pop("selftest-dataset", None)
 
         # Regression for HTTP 500: with start_new_session=True the PGID is the PID.
         # A child that exits immediately must still create a tracked job instead of

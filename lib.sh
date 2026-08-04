@@ -54,6 +54,9 @@ PY
     "$VENV_PYTHON" "$SCRIPT_DIR/selftest.py" || fail "Self-test aplikacji nie powiódł się"
     "$VENV_PYTHON" "$SCRIPT_DIR/control_selftest.py" || fail "Self-test control servera nie powiódł się"
     "$VENV_PYTHON" "$SCRIPT_DIR/selftest_buffered_dataset.py" || fail "Self-test bufora datasetu nie powiódł się"
+    "$VENV_PYTHON" "$SCRIPT_DIR/selftest_entropy_extractors.py" || fail "Self-test ekstraktorów nie powiódł się"
+    "$VENV_PYTHON" "$SCRIPT_DIR/selftest_stream_statistics.py" || fail "Self-test statystyk pełnego datasetu nie powiódł się"
+    "$VENV_PYTHON" "$SCRIPT_DIR/selftest_parallel_dataset_jobs.py" || fail "Self-test równoległych zadań dataset-y nie powiódł się"
 }
 
 check_device() {

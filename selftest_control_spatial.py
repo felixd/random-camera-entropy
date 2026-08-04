@@ -50,19 +50,34 @@ def main() -> int:
     template = (root / "templates" / "control.html").read_text(encoding="utf-8")
     Environment().parse(template)
     for marker in (
-        'id="floatingHelp"', 'id="pinnedHelp"', 'id="closePinnedHelp"',
-        'class="floating-help"', 'class="pinned-help"',
-        'function showFloatingHelp(', 'function pinHelp(',
-        "node.addEventListener('click',()=>pinHelp",
-        "position:fixed", "max-height:min(72vh,680px)",
+        '<header class="top">',
+        'id="previewBtn"',
+        'position:sticky',
+        '<h2>Uruchom test</h2>',
+        '<h3>Źródło danych</h3>',
+        '<h3>Kalibracja i maska „bad pixels”</h3>',
+        '<h3>Tworzenie i ekstrakcja bitów</h3>',
+        '<h3>Ekstraktor Von Neumanna</h3>',
+        '<h3>Kondycjonowanie kryptograficzne</h3>',
+        '<h3>Health tests i fail-closed</h3>',
+        '<h3>Wyniki, diagnostyka i kampania</h3>',
+        'name="dataset_scope"',
+        '<option value="all-available">Całość dostępna w chwili startu</option>',
+        'name="von_neumann_passes"',
+        '<option value="4">4</option>',
+        'name="stream_stats_window_pairs"',
+        "p?.id==='final-preproduction'",
+        "stage.classList.add('profile-locked')",
+        "f.classList.add('preset-field')",
     ):
         assert marker in template, marker
+    assert '<iframe' not in template.lower()
+    assert 'id="floatingHelp"' not in template
     assert 'id="contextHelp"' not in template
-    assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="8" step="any" inputmode="decimal"' in template
-    assert 'name="assessment_level" id="assessment_level"' in template
+    assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="4" step="any"' in template
+    assert 'id="assessment_level" name="assessment_level"' in template
     assert '<option value="full" selected>' in template
-    assert "field.valueAsNumber" in template
-    assert "Number.isFinite(number)" in template
+    assert "f.valueAsNumber" in template
 
     for name in (
         "spatial_mask_pattern", "spatial_step_x", "spatial_step_y",
@@ -120,7 +135,7 @@ def main() -> int:
             "lsb_bits": "4",
             "entropy_credit_bits_per_pixel": "0.5",
         }
-        env, slug, output = manager._build_environment(payload, sources[0], "spatial-grid4", "1234567890abcdef")
+        env, slug, output = manager._build_environment(payload, sources[0], "spatial-grid4", "1234567890abcdef", 19001)
         assert env["SPATIAL_MASK_PATTERN"] == "grid"
         assert env["SPATIAL_STEP_X"] == "4" and env["SPATIAL_PHASE_Y"] == "2"
         assert env["TEMPORAL_SPATIAL_OFFSET_X"] == "-2"
@@ -131,26 +146,26 @@ def main() -> int:
 
         comma_payload = dict(payload, entropy_credit_bits_per_pixel="0,5")
         comma_env, _, _ = manager._build_environment(
-            comma_payload, sources[0], "single", "comma-credit-test"
+            comma_payload, sources[0], "single", "comma-credit-test", 19002
         )
         assert comma_env["ENTROPY_CREDIT_BITS_PER_PIXEL"] == "0.5"
         assert slug.startswith("web-spatial-grid4-") and output.name == slug
 
         campaign_env, campaign_slug, campaign_output = manager._build_environment(
-            {}, sources[0], "spatial-campaign", "abcdef1234567890"
+            {}, sources[0], "spatial-campaign", "abcdef1234567890", 19003
         )
         assert campaign_env["CAMPAIGN"] == campaign_slug
         assert campaign_output == data / campaign_slug
         for profile in ("lsb-campaign", "global-all"):
             aggregate_env, aggregate_slug, aggregate_output = manager._build_environment(
-                {}, sources[0], profile, "abcdef1234567890"
+                {}, sources[0], profile, "abcdef1234567890", 19004
             )
             assert aggregate_env["CAMPAIGN"] == aggregate_slug
             assert aggregate_output == data / aggregate_slug
 
         bad = dict(payload, spatial_phase_x="4")
         try:
-            manager._build_environment(bad, sources[0], "spatial-grid4", "badbadbadbadbadb")
+            manager._build_environment(bad, sources[0], "spatial-grid4", "badbadbadbadbadb", 19005)
         except ValueError:
             pass
         else:
@@ -158,7 +173,7 @@ def main() -> int:
 
         bad_credit = dict(payload, lsb_bits="2", entropy_credit_bits_per_pixel="3")
         try:
-            manager._build_environment(bad_credit, sources[0], "single", "badcreditbadcred")
+            manager._build_environment(bad_credit, sources[0], "single", "badcreditbadcred", 19006)
         except ValueError:
             pass
         else:

@@ -21,7 +21,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-APP_VERSION = "2026.08.03.camera-entropy-binary-geometry.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-binary-geometry.7.12.0"
 REPORT_NAME = "binary_geometry_report.html"
 SUMMARY_NAME = "binary_geometry_summary.json"
 CSV_NAME = "binary_geometry_metrics.csv"

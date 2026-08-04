@@ -102,6 +102,8 @@ def main() -> int:
     failure = load(run / "run_failed.json")
     geometry = load(run / "binary_geometry_summary.json")
     lsb_analysis = load(run / "lsb_bitplane_summary.json")
+    stream_lsb = load(run / "stream_lsb_summary.json")
+    stream_aggregate = stream_lsb.get("aggregate", {}) if isinstance(stream_lsb.get("aggregate"), dict) else {}
     analyses_container = summary.get("analyses", {}) if isinstance(summary.get("analyses"), dict) else {}
 
     stage_definitions = [
@@ -165,6 +167,11 @@ def main() -> int:
         metric_card("SHA3 output", fmt_bytes(conditioner.get("written_bytes")), f"{fmt(conditioner.get('compression_ratio'), 5)}:1 compression"),
     ]
 
+    if stream_lsb:
+        cards.extend([
+            metric_card("Hmin cały przebieg", fmt(stream_aggregate.get("symbol_min_entropy_bits_per_input_bit"), 8), f'{stream_aggregate.get("total_symbols", 0)} symboli'),
+            metric_card("Najgorsze okno Hmin", fmt(stream_lsb.get("worst_window_hmin_per_input_bit"), 8), f'{stream_lsb.get("window_count", 0)} okien po {stream_lsb.get("window_pairs", "?")} par'),
+        ])
     if lsb_analysis:
         cards.extend([
             metric_card("LSB symbol Hmin", fmt(lsb_analysis.get("symbol_min_entropy_bits_per_symbol"), 8), f'{lsb_analysis.get("lsb_bits", "?")} bit/symbol'),
@@ -222,6 +229,22 @@ def main() -> int:
         },
     ]
 
+    if stream_lsb:
+        windows = [row for row in stream_lsb.get("windows", []) if isinstance(row, dict)]
+        plot_specs.append({
+            "id": "stream-window-hmin",
+            "data": [{
+                "type": "scatter", "mode": "lines+markers",
+                "x": [row.get("index") for row in windows],
+                "y": [row.get("symbol_min_entropy_bits_per_input_bit") for row in windows],
+                "name": "Hmin/input bit",
+            }],
+            "layout": {
+                "xaxis": {"title": "Kolejne okno całego przebiegu"},
+                "yaxis": {"title": "Hmin/input bit", "range": [0, 1.01]},
+            },
+        })
+
     stage_table = table_html(
         ["Etap", "Bajty", "P(1)", "|P(1)-0.5|", "φ lag-1", "Hmin bajtu", "χ²", "χ² p"],
         [[
@@ -261,6 +284,7 @@ def main() -> int:
         '<a href="binary_geometry_report.html">Geometria 2D</a>'
         if geometry else ""
     )
+    stream_link = '<a href="stream_lsb_summary.json">LSB cały przebieg</a>' if stream_lsb else ""
     lsb_link = (
         '<a href="lsb_bitplane_report.html">Analiza bitów LSB</a>'
         if lsb_analysis else ""
@@ -287,6 +311,26 @@ def main() -> int:
             '<p class="muted">Marginalne estymaty empiryczne i zależności między bitami tego samego piksela; nie są formalną deklaracją SP 800-90B.</p>'
             + lsb_table + '</section>'
         )
+    stream_section = ""
+    if stream_lsb:
+        windows = [row for row in stream_lsb.get("windows", []) if isinstance(row, dict)]
+        window_table = table_html(
+            ["Okno", "Pary", "Symbole", "Klatka od", "Klatka do", "Hmin/bit", "Max |bias|", "Max |lag1|"],
+            [[
+                row.get("index"), row.get("pair_updates"), row.get("total_symbols"),
+                row.get("first_frame_id"), row.get("last_frame_id"),
+                fmt(row.get("symbol_min_entropy_bits_per_input_bit"), 8),
+                fmt(row.get("max_abs_bit_bias"), 8), fmt(row.get("max_abs_bit_lag1_phi"), 8),
+            ] for row in windows],
+            compact=True,
+        )
+        stream_section = (
+            '<section><h2>Statystyki streamingowe całego przebiegu</h2>'
+            '<p><a href="stream_lsb_summary.json">JSON</a>. W przeciwieństwie do ograniczonego pliku walidacyjnego ta sekcja obejmuje wszystkie zaakceptowane symbole.</p>'
+            + chart_div("stream-window-hmin", "Stabilność Hmin w czasie", "Każdy punkt jest osobnym oknem par ramek.", 390)
+            + window_table + '</section>'
+        )
+
     body = (
         metrics_grid(cards)
         + '<div class="chart-grid">'
@@ -297,6 +341,7 @@ def main() -> int:
         + chart_div("stage-chi-p", "Chi-square p-value", "Pomaga wykryć nierównomierność bajtów; nie jest samodzielnym kryterium jakości.", 350)
         + '</div>'
         + '<section><h2>Najważniejsze metryki</h2>' + stage_table + '</section>'
+        + stream_section
         + binary_geometry_section(run, geometry)
         + lsb_section
         + (
@@ -309,12 +354,12 @@ def main() -> int:
         )
         + '<details><summary>Konfiguracja przebiegu</summary>' + table_html(["Parametr", "Wartość"], config_rows, compact=True) + '</details>'
         + (f'<details><summary>Pliki wynikowe i sumy SHA-256</summary>{file_table}</details>' if file_table else "")
-        + f'<section><h2>Szczegółowe analizy</h2><p>{dual_link} {geometry_link} {lsb_link}</p><ul>{analysis_links}</ul></section>'
+        + f'<section><h2>Szczegółowe analizy</h2><p>{dual_link} {geometry_link} {stream_link} {lsb_link}</p><ul>{analysis_links}</ul></section>'
         + '<section><h2>Metadane</h2><p><a href="runner_summary.json">runner_summary.json</a> · '
         + ('<a href="run_failed.json">run_failed.json</a> · ' if failure else '<a href="output_complete.json">output_complete.json</a> · <a href="READY.json">READY.json</a> · ')
         + '<a href="console.log">console.log</a></p></section>'
     )
-    navigation = '<a href="../">Katalog nadrzędny</a>' + dual_link + geometry_link + lsb_link
+    navigation = '<a href="../">Katalog nadrzędny</a>' + dual_link + geometry_link + stream_link + lsb_link
     document = html_page(
         title=f"Raport przebiegu — {run.name}",
         subtitle=f"Status: {status}",

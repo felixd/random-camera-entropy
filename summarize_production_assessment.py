@@ -22,7 +22,7 @@ from report_ui import (
     rate_span, rate_unit_selector, table_html,
 )
 
-APP_VERSION = "2026.08.03.camera-entropy-production-assessment-report.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-production-assessment-report.7.12.0"
 STAGE_ORDER = (
     "lsb-mode-width", "temporal-pairing", "spatial-serialization",
     "entropy-credit", "conditioner", "dual-weave", "reproducibility",
@@ -92,13 +92,18 @@ def collect_case(root: Path, state_path: Path) -> dict[str, Any]:
     failed = read_json(run / "run_failed.json")
     terminal = complete or failed
     bitplanes = read_json(run / "lsb_bitplane_summary.json")
+    stream_lsb = read_json(run / "stream_lsb_summary.json")
+    stream_aggregate = stream_lsb.get("aggregate", {}) if isinstance(stream_lsb.get("aggregate"), dict) else {}
     conditioned = read_json(run / "analysis_conditioned" / "summary.json")
     raw_rate, raw_basis = select_rate(terminal, ("raw_change_bps_lifetime", "raw_change_bps_10s", "raw_change_bps_current"))
     masked_rate, masked_basis = select_rate(terminal, ("masked_bps_lifetime", "masked_bps_10s", "masked_bps_current"))
     output_rate = finite(nested(terminal, "conditioner", "output_bps_until_complete"))
     health = terminal.get("health", {}) if isinstance(terminal.get("health"), dict) else {}
     bits = int(config.get("lsb_bits", case.get("parameters", {}).get("LSB_BITS", 1)) or 1)
-    hmin_symbol = finite(bitplanes.get("symbol_min_entropy_bits_per_symbol"))
+    hmin_symbol = finite(stream_aggregate.get("symbol_min_entropy_bits_per_symbol"))
+    hmin_basis = "stream-all" if hmin_symbol is not None else "validation-file"
+    if hmin_symbol is None:
+        hmin_symbol = finite(bitplanes.get("symbol_min_entropy_bits_per_symbol"))
     symbols_per_second = masked_rate / bits if masked_rate is not None and bits > 0 else None
     empirical_hmin_rate = symbols_per_second * hmin_symbol if symbols_per_second is not None and hmin_symbol is not None else None
     credit = finite(config.get("entropy_credit_bits_per_pixel", case.get("parameters", {}).get("ENTROPY_CREDIT_BITS_PER_PIXEL")))
@@ -106,6 +111,14 @@ def collect_case(root: Path, state_path: Path) -> dict[str, Any]:
     output_p1 = finite(conditioned.get("p1"))
     output_lag1 = finite(nested(conditioned, "lag1", "phi"))
     status = "failed" if failed else "complete" if complete else str(case.get("status") or "incomplete")
+    stream_hmin_per_bit = finite(stream_aggregate.get("symbol_min_entropy_bits_per_input_bit"))
+    validation_hmin_per_bit = finite(bitplanes.get("symbol_min_entropy_bits_per_input_bit"))
+    cross_phi = finite(stream_aggregate.get("max_abs_cross_plane_phi"))
+    cross_mi = finite(stream_aggregate.get("max_cross_plane_mutual_information_bits"))
+    if cross_phi is None:
+        cross_phi = finite(bitplanes.get("max_abs_cross_plane_phi"))
+    if cross_mi is None:
+        cross_mi = finite(bitplanes.get("max_cross_plane_mutual_information_bits"))
     row = {
         "index": case.get("index"), "id": case.get("id"), "stage": case.get("stage"), "label": case.get("label"),
         "status": status, "exit_code": case.get("exit_code"), "run_dir": run_rel,
@@ -124,9 +137,18 @@ def collect_case(root: Path, state_path: Path) -> dict[str, Any]:
         "empirical_hmin_bps": empirical_hmin_rate, "conditioned_output_bps": output_rate,
         "time_to_target_seconds": finite(nested(terminal, "conditioner", "time_to_target_seconds")),
         "symbol_hmin": hmin_symbol,
-        "hmin_per_input_bit": finite(bitplanes.get("symbol_min_entropy_bits_per_input_bit")),
-        "max_cross_plane_phi": finite(bitplanes.get("max_abs_cross_plane_phi")),
-        "max_cross_plane_mi": finite(bitplanes.get("max_cross_plane_mutual_information_bits")),
+        "hmin_per_input_bit": stream_hmin_per_bit if stream_hmin_per_bit is not None else validation_hmin_per_bit,
+        "hmin_basis": hmin_basis,
+        "validation_hmin_per_input_bit": validation_hmin_per_bit,
+        "stream_total_symbols": stream_aggregate.get("total_symbols"),
+        "stream_pair_updates": stream_aggregate.get("pair_updates"),
+        "stream_window_count": stream_lsb.get("window_count"),
+        "worst_window_hmin_per_input_bit": finite(stream_lsb.get("worst_window_hmin_per_input_bit")),
+        "max_window_abs_bit_bias": finite(stream_lsb.get("max_window_abs_bit_bias")),
+        "max_window_abs_bit_lag1_phi": finite(stream_lsb.get("max_window_abs_bit_lag1_phi")),
+        "stream_windows": stream_lsb.get("windows", []) if isinstance(stream_lsb.get("windows"), list) else [],
+        "max_cross_plane_phi": cross_phi,
+        "max_cross_plane_mi": cross_mi,
         "output_byte_hmin": finite(conditioned.get("byte_min_entropy_bits_per_byte")),
         "output_p1": output_p1, "output_p1_deviation": abs(output_p1 - .5) if output_p1 is not None else None,
         "output_lag1": output_lag1, "output_abs_lag1": abs(output_lag1) if output_lag1 is not None else None,
@@ -137,6 +159,7 @@ def collect_case(root: Path, state_path: Path) -> dict[str, Any]:
         "parameters": merge_parameters(case, config),
         "report": f"{run_rel}/run_report.html" if (run / "run_report.html").is_file() else "",
         "bitplane_report": f"{run_rel}/lsb_bitplane_report.html" if (run / "lsb_bitplane_report.html").is_file() else "",
+        "stream_lsb_json": f"{run_rel}/stream_lsb_summary.json" if stream_lsb else "",
         "failure_json": f"{run_rel}/run_failed.json" if failed else "",
     }
     dual = read_json(run / "dual_weave_report.json")
@@ -153,7 +176,7 @@ def safe_link(path: str, label: str) -> str:
 
 
 def links(row: dict[str, Any]) -> RawHtml:
-    values = [safe_link(str(row.get(key) or ""), label) for key, label in (("report", "raport"), ("bitplane_report", "LSB"), ("failure_json", "błąd"), ("log", "log"))]
+    values = [safe_link(str(row.get(key) or ""), label) for key, label in (("report", "raport"), ("bitplane_report", "LSB plik"), ("stream_lsb_json", "LSB cały dataset"), ("failure_json", "błąd"), ("log", "log"))]
     return RawHtml(" · ".join(value for value in values if value) or "—")
 
 

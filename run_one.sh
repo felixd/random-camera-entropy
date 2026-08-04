@@ -45,16 +45,28 @@ BINARY_GEOMETRY_MAX_FILES="${BINARY_GEOMETRY_MAX_FILES:-8}"
 BINARY_GEOMETRY_MAX_BYTES="${BINARY_GEOMETRY_MAX_BYTES:-16777216}"
 WARMUP_SECONDS="${WARMUP_SECONDS:-1800}"
 CALIBRATION_PAIRS="${CALIBRATION_PAIRS:-512}"
+MASK_P1_MIN="${MASK_P1_MIN:-0.30}"
+MASK_P1_MAX="${MASK_P1_MAX:-0.70}"
+MASK_TRANSITION_MIN="${MASK_TRANSITION_MIN:-0.20}"
+MASK_TRANSITION_MAX="${MASK_TRANSITION_MAX:-0.80}"
+MASK_CLIP_MAX="${MASK_CLIP_MAX:-0.01}"
+SHADOW_MIN_ACTIVE_RETENTION="${SHADOW_MIN_ACTIVE_RETENTION:-0.95}"
+SHADOW_MIN_JACCARD="${SHADOW_MIN_JACCARD:-0.90}"
+SHADOW_FAIL_CONSECUTIVE="${SHADOW_FAIL_CONSECUTIVE:-5}"
 DIAGNOSTIC_VN_BYTES="${DIAGNOSTIC_VN_BYTES:-10485760}"
 CONDITIONED_BYTES="${CONDITIONED_BYTES:-10485760}"
 VALIDATION_BYTES="${VALIDATION_BYTES:-10485760}"
 CONDITIONER_INPUT_BITS="${CONDITIONER_INPUT_BITS:-2048}"
 CORRELATION_EVERY="${CORRELATION_EVERY:-10}"
+STREAM_STATS_WINDOW_PAIRS="${STREAM_STATS_WINDOW_PAIRS:-1024}"
 CORRELATION_DISTANCES="${CORRELATION_DISTANCES:-1,2,3,4,6,8,12,16,24,32,48,64}"
 WEB_IMAGES="${WEB_IMAGES:-0}"
 MASK_SNAPSHOT_INTERVAL_SECONDS="${MASK_SNAPSHOT_INTERVAL_SECONDS:-60}"
 MASK_SNAPSHOT_IMAGES="${MASK_SNAPSHOT_IMAGES:-0}"
 ENABLE_VON_NEUMANN="${ENABLE_VON_NEUMANN:-1}"
+VON_NEUMANN_PASSES="${VON_NEUMANN_PASSES:-1}"
+CONDITIONER="${CONDITIONER:-sha3-512}"
+EXIT_ON_OUTPUT_LIMIT="${EXIT_ON_OUTPUT_LIMIT:-1}"
 LIVE_BYTE_DIAGNOSTICS="${LIVE_BYTE_DIAGNOSTICS:-1}"
 LIVE_HEATMAP_INTERVAL_SECONDS="${LIVE_HEATMAP_INTERVAL_SECONDS:-60}"
 LIVE_HEATMAP_MAX_STAGES="${LIVE_HEATMAP_MAX_STAGES:-8}"
@@ -74,6 +86,13 @@ done
 [[ "$LSB_BITS" =~ ^[0-9]+$ ]] || fail "LSB_BITS musi być liczbą całkowitą"
 (( LSB_BITS >= 1 && LSB_BITS <= 4 )) || fail "LSB_BITS musi być w zakresie 1..4"
 awk -v c="$ENTROPY_CREDIT_BITS_PER_PIXEL" -v b="$LSB_BITS" 'BEGIN{exit !(c>0 && c<=b)}' || fail "ENTROPY_CREDIT_BITS_PER_PIXEL musi być w (0, LSB_BITS]"
+awk -v a="$MASK_P1_MIN" -v b="$MASK_P1_MAX" 'BEGIN{exit !(a>0 && a<b && b<1)}' || fail "MASK_P1_MIN/MAX muszą spełniać 0 < min < max < 1"
+awk -v a="$MASK_TRANSITION_MIN" -v b="$MASK_TRANSITION_MAX" 'BEGIN{exit !(a>0 && a<b && b<1)}' || fail "MASK_TRANSITION_MIN/MAX muszą spełniać 0 < min < max < 1"
+awk -v a="$MASK_CLIP_MAX" 'BEGIN{exit !(a>=0 && a<=1)}' || fail "MASK_CLIP_MAX musi być w [0,1]"
+awk -v a="$SHADOW_MIN_ACTIVE_RETENTION" 'BEGIN{exit !(a>0 && a<=1)}' || fail "SHADOW_MIN_ACTIVE_RETENTION musi być w (0,1]"
+awk -v a="$SHADOW_MIN_JACCARD" 'BEGIN{exit !(a>0 && a<=1)}' || fail "SHADOW_MIN_JACCARD musi być w (0,1]"
+[[ "$SHADOW_FAIL_CONSECUTIVE" =~ ^[0-9]+$ ]] && (( SHADOW_FAIL_CONSECUTIVE >= 1 )) || fail "SHADOW_FAIL_CONSECUTIVE musi być >= 1"
+[[ "$STREAM_STATS_WINDOW_PAIRS" =~ ^[0-9]+$ ]] && (( STREAM_STATS_WINDOW_PAIRS >= 1 )) || fail "STREAM_STATS_WINDOW_PAIRS musi być >= 1"
 [[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
 [[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"
 for value in "$SPATIAL_STEP_X" "$SPATIAL_STEP_Y" "$SPATIAL_PHASE_X" "$SPATIAL_PHASE_Y" "$SPATIAL_BLOCK_WIDTH" "$SPATIAL_BLOCK_HEIGHT" "$SERIALIZATION_TILE_WIDTH" "$SERIALIZATION_TILE_HEIGHT"; do
@@ -100,6 +119,10 @@ fi
 [[ "$WEB_IMAGES" == 0 || "$WEB_IMAGES" == 1 ]] || fail "WEB_IMAGES=0 albo 1"
 [[ "$MASK_SNAPSHOT_IMAGES" == 0 || "$MASK_SNAPSHOT_IMAGES" == 1 ]] || fail "MASK_SNAPSHOT_IMAGES=0 albo 1"
 [[ "$ENABLE_VON_NEUMANN" == 0 || "$ENABLE_VON_NEUMANN" == 1 ]] || fail "ENABLE_VON_NEUMANN=0 albo 1"
+[[ "$VON_NEUMANN_PASSES" =~ ^[0-4]$ ]] || fail "VON_NEUMANN_PASSES musi być w zakresie 0..4"
+[[ "$CONDITIONER" =~ ^(none|sha3-512)$ ]] || fail "CONDITIONER=none albo sha3-512"
+[[ "$EXIT_ON_OUTPUT_LIMIT" == 0 || "$EXIT_ON_OUTPUT_LIMIT" == 1 ]] || fail "EXIT_ON_OUTPUT_LIMIT=0 albo 1"
+if (( VON_NEUMANN_PASSES == 0 )); then ENABLE_VON_NEUMANN=0; fi
 [[ "$LIVE_BYTE_DIAGNOSTICS" == 0 || "$LIVE_BYTE_DIAGNOSTICS" == 1 ]] || fail "LIVE_BYTE_DIAGNOSTICS=0 albo 1"
 for value in "$BINARY_GEOMETRY_MAX_FILES" "$BINARY_GEOMETRY_MAX_BYTES"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Limity raportu geometrii muszą być liczbami całkowitymi"
@@ -116,8 +139,12 @@ awk -v v="$LIVE_HEATMAP_INTERVAL_SECONDS" 'BEGIN{exit !(v>=0)}' || fail "LIVE_HE
 (( LIVE_HEATMAP_MIN_BYTES >= 256 )) || fail "LIVE_HEATMAP_MIN_BYTES musi być >= 256"
 [[ ! -e "$RUN_DIR" ]] || fail "Katalog już istnieje: $RUN_DIR"
 mkdir -p "$RUN_DIR" "$DATA_ROOT"
-exec 9>"$DATA_ROOT/.camera-entropy-v7.lock"
-flock -n 9 || fail "Inny test korzysta z tego katalogu data"
+# Live camera transports are exclusive. Buffered datasets are immutable/read-only
+# inputs and may be processed by many workers in parallel.
+if [[ "$SOURCE_TYPE" != dataset-y ]]; then
+    exec 9>"$DATA_ROOT/.camera-entropy-live-source.lock"
+    flock -n 9 || fail "Inny test korzysta z aktywnego źródła kamery"
+fi
 
 source_args=(--source-type "$SOURCE_TYPE")
 case "$SOURCE_TYPE" in
@@ -264,6 +291,7 @@ esac
 web_flag="--web-images"; [[ "$WEB_IMAGES" == 1 ]] || web_flag="--no-web-images"
 mask_snapshot_images_flag="--mask-snapshot-images"; [[ "$MASK_SNAPSHOT_IMAGES" == 1 ]] || mask_snapshot_images_flag="--no-mask-snapshot-images"
 vn_stage_flag="--von-neumann-stage"; [[ "$ENABLE_VON_NEUMANN" == 1 ]] || vn_stage_flag="--no-von-neumann-stage"
+exit_limit_flag="--exit-on-output-limit"; [[ "$EXIT_ON_OUTPUT_LIMIT" == 1 ]] || exit_limit_flag="--no-exit-on-output-limit"
 live_byte_flag="--live-byte-diagnostics"; [[ "$LIVE_BYTE_DIAGNOSTICS" == 1 ]] || live_byte_flag="--no-live-byte-diagnostics"
 comparison_flag="--no-spatial-comparison"; [[ "$SPATIAL_COMPARISON" == 1 ]] && comparison_flag="--spatial-comparison"
 dual_weave_flag="--no-dual-weave-comparison"; [[ "$DUAL_WEAVE_COMPARISON" == 1 ]] && dual_weave_flag="--dual-weave-comparison"
@@ -272,7 +300,7 @@ if (( DIAGNOSTIC_VN_BYTES > 0 )); then
 else
     vn_args=(--no-write-output --max-output-bytes 0)
 fi
-if (( CONDITIONED_BYTES > 0 )); then
+if [[ "$CONDITIONER" == sha3-512 && "$CONDITIONED_BYTES" -gt 0 ]]; then
     conditioner_args=(--conditioner sha3-512 --conditioner-input-bits "$CONDITIONER_INPUT_BITS" --write-conditioned-output --conditioned-output-bytes "$CONDITIONED_BYTES")
 else
     conditioner_args=(--conditioner none --no-write-conditioned-output --conditioned-output-bytes 0)
@@ -298,22 +326,29 @@ command=(
     "$dual_weave_flag" --dual-weave-orders "$DUAL_WEAVE_ORDERS"
     --dual-weave-alignments "$DUAL_WEAVE_ALIGNMENTS"
     --calibration-pairs "$CALIBRATION_PAIRS"
+    --mask-p1-min "$MASK_P1_MIN" --mask-p1-max "$MASK_P1_MAX"
+    --mask-transition-min "$MASK_TRANSITION_MIN" --mask-transition-max "$MASK_TRANSITION_MAX"
+    --mask-clip-max "$MASK_CLIP_MAX"
     --no-dynamic-clip-filter --max-active-clip-rate "$MAX_ACTIVE_CLIP_RATE"
     --clip-fail-consecutive "$CLIP_FAIL_CONSECUTIVE"
     --control-check-seconds "$CONTROL_CHECK_SECONDS"
     --control-fail-consecutive "$CONTROL_FAIL_CONSECUTIVE" --control-stop-on-mismatch
+    --shadow-min-active-retention "$SHADOW_MIN_ACTIVE_RETENTION"
+    --shadow-min-jaccard "$SHADOW_MIN_JACCARD"
+    --shadow-fail-consecutive "$SHADOW_FAIL_CONSECUTIVE"
     --shadow-stop-on-drift
     --output-dir "$RUN_DIR"
     "${vn_args[@]}" "${conditioner_args[@]}"
     --validation-output-bytes "$VALIDATION_BYTES"
+    --stream-stats-window-pairs "$STREAM_STATS_WINDOW_PAIRS"
     --correlation-distances "$CORRELATION_DISTANCES" --correlation-every "$CORRELATION_EVERY"
     --mask-snapshot-interval-seconds "$MASK_SNAPSHOT_INTERVAL_SECONDS"
-    "$mask_snapshot_images_flag" "$vn_stage_flag"
+    "$mask_snapshot_images_flag" "$vn_stage_flag" --von-neumann-passes "$VON_NEUMANN_PASSES"
     "$live_byte_flag"
     --live-heatmap-interval-seconds "$LIVE_HEATMAP_INTERVAL_SECONDS"
     --live-heatmap-max-stages "$LIVE_HEATMAP_MAX_STAGES"
     --live-heatmap-min-bytes "$LIVE_HEATMAP_MIN_BYTES"
-    --exit-on-output-limit --exit-on-failure
+    "$exit_limit_flag" --exit-on-failure
     "$web_flag"
 )
 
@@ -354,13 +389,30 @@ cat > "$RUN_DIR/runner_config.json" <<JSON
   "binary_geometry_max_bytes": $BINARY_GEOMETRY_MAX_BYTES,
   "warmup_seconds": $WARMUP_SECONDS,
   "calibration_pairs": $CALIBRATION_PAIRS,
+  "mask_p1_min": $MASK_P1_MIN,
+  "mask_p1_max": $MASK_P1_MAX,
+  "mask_transition_min": $MASK_TRANSITION_MIN,
+  "mask_transition_max": $MASK_TRANSITION_MAX,
+  "mask_clip_max": $MASK_CLIP_MAX,
+  "max_active_clip_rate": $MAX_ACTIVE_CLIP_RATE,
+  "clip_fail_consecutive": $CLIP_FAIL_CONSECUTIVE,
+  "shadow_min_active_retention": $SHADOW_MIN_ACTIVE_RETENTION,
+  "shadow_min_jaccard": $SHADOW_MIN_JACCARD,
+  "shadow_fail_consecutive": $SHADOW_FAIL_CONSECUTIVE,
   "diagnostic_vn_bytes": $DIAGNOSTIC_VN_BYTES,
   "conditioned_bytes": $CONDITIONED_BYTES,
   "conditioner_input_bits": $CONDITIONER_INPUT_BITS,
   "validation_bytes": $VALIDATION_BYTES,
+  "stream_stats_window_pairs": $STREAM_STATS_WINDOW_PAIRS,
   "web_images": $WEB_IMAGES,
   "mask_snapshot_images": $MASK_SNAPSHOT_IMAGES,
   "von_neumann_stage": $ENABLE_VON_NEUMANN,
+  "von_neumann_passes": $VON_NEUMANN_PASSES,
+  "conditioner": "$CONDITIONER",
+  "exit_on_output_limit": $EXIT_ON_OUTPUT_LIMIT,
+  "dataset_start_frame": ${DATASET_START_FRAME:-0},
+  "dataset_max_frames": ${DATASET_MAX_FRAMES:-0},
+  "dataset_follow": ${DATASET_FOLLOW:-0},
   "live_byte_diagnostics": $LIVE_BYTE_DIAGNOSTICS,
   "live_heatmap_interval_seconds": $LIVE_HEATMAP_INTERVAL_SECONDS,
   "live_heatmap_max_stages": $LIVE_HEATMAP_MAX_STAGES,
@@ -373,7 +425,7 @@ JSON
 log "Start: $RUN_DIR"
 log "Źródło: $SOURCE_TYPE — $source_label"
 log "Nastaw: exposure=$EXPOSURE, $PAIRING_MODE/k=$PAIR_LAG_FRAMES, sample=$SAMPLE_MODE/${LSB_BITS}LSB, credit=$ENTROPY_CREDIT_BITS_PER_PIXEL bit/pixel, spatial=$SPATIAL_SAMPLING, dual-weave=$DUAL_WEAVE_COMPARISON (orders=$DUAL_WEAVE_ORDERS; alignments=$DUAL_WEAVE_ALIGNMENTS)"
-log "Cele: VN=$DIAGNOSTIC_VN_BYTES B, SHA3=$CONDITIONED_BYTES B, validation=$VALIDATION_BYTES B"
+log "Cele: VN×$VON_NEUMANN_PASSES=$DIAGNOSTIC_VN_BYTES B, conditioner=$CONDITIONER/$CONDITIONED_BYTES B, validation=$VALIDATION_BYTES B, exit-on-limit=$EXIT_ON_OUTPUT_LIMIT"
 "${command[@]}" > >(tee "$RUN_DIR/console.log") 2>&1 &
 pid=$!
 cleanup() {
@@ -468,6 +520,17 @@ if (run/"lsb_bitplane_summary.json").exists():
  bitplanes=json.loads((run/"lsb_bitplane_summary.json").read_text())
  result["lsb_bitplane_report"]="lsb_bitplane_report.html"
  result["lsb_bitplane_summary"]={k:bitplanes.get(k) for k in ("lsb_bits","symbol_min_entropy_bits_per_symbol","symbol_min_entropy_bits_per_input_bit","max_abs_cross_plane_phi","max_cross_plane_mutual_information_bits")}
+if (run/"stream_lsb_summary.json").exists():
+ stream=json.loads((run/"stream_lsb_summary.json").read_text())
+ aggregate=stream.get("aggregate",{})
+ result["stream_lsb_summary"]={
+  "total_symbols":aggregate.get("total_symbols"),
+  "pair_updates":aggregate.get("pair_updates"),
+  "symbol_min_entropy_bits_per_symbol":aggregate.get("symbol_min_entropy_bits_per_symbol"),
+  "symbol_min_entropy_bits_per_input_bit":aggregate.get("symbol_min_entropy_bits_per_input_bit"),
+  "worst_window_hmin_per_input_bit":stream.get("worst_window_hmin_per_input_bit"),
+  "window_count":stream.get("window_count"),
+ }
 for name in ("conditioned","vn","selected_raw","temporal_raw","direct_lsb"):
  p=run/f"analysis_{name}"/"summary.json"
  if p.exists():

@@ -47,8 +47,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash
 
 from spatial_docs import register_documentation_routes
+from profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.03.camera-entropy-distributed-control.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-distributed-control.7.12.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -62,77 +63,6 @@ REQUIRED_DATASET_INDEX_FIELDS = {
     "captured_monotonic_ns",
     "source_warmup_seconds",
     "source_connection_generation",
-}
-
-ALLOWED_PROFILES = {
-    "smoke": "smoke_preproduction.sh",
-    "temporal-sha3": "smoke_temporal_sha3.sh",
-    "single": "run_one.sh",
-    "qualification": "qualification_preproduction.sh",
-    "cold-start": "qualification_cold_start_run.sh",
-    "spatial-phases": "smoke_checkerboard_phases.sh",
-    "spatial-baseline": "smoke_spatial_baseline.sh",
-    "spatial-checker-even": "smoke_spatial_checkerboard_even.sh",
-    "spatial-checker-odd": "smoke_spatial_checkerboard_odd.sh",
-    "spatial-grid2": "smoke_spatial_grid_2x2.sh",
-    "spatial-grid4": "smoke_spatial_grid_4x4.sh",
-    "spatial-block4": "smoke_spatial_block_4x4_phase_1_2.sh",
-    "spatial-offset11": "smoke_spatial_offset_diagonal_1.sh",
-    "spatial-offset22": "smoke_spatial_offset_diagonal_2.sh",
-    "spatial-serpentine": "smoke_spatial_serpentine.sh",
-    "spatial-tile16": "smoke_spatial_tile_interleave_16.sh",
-    "spatial-campaign": "smoke_spatial_profiles.sh",
-    "dual-weave": "smoke_dual_weave.sh",
-    "dual-weave-stagger2": "smoke_dual_weave_stagger2.sh",
-    "dual-weave-lags": "smoke_dual_weave_lags.sh",
-    "dual-weave-stagger-qualification": "qualification_dual_weave_stagger.sh",
-    "lsb-campaign": "smoke_lsb_profiles.sh",
-    "production-assessment": "qualification_production_assessment.py",
-    "global-all": "qualification_global_all_profiles.sh",
-}
-
-PROFILE_LABELS = {
-    "smoke": "Smoke — klasyczny VN + SHA3",
-    "temporal-sha3": "Temporal SHA3 — uproszczony tor",
-    "single": "Pojedynczy przebieg",
-    "qualification": "Kwalifikacja",
-    "cold-start": "Kwalifikacja po zimnym starcie",
-    "spatial-phases": "Checkerboard phases smoke",
-    "spatial-baseline": "Spatial — baseline full / row-major",
-    "spatial-checker-even": "Spatial — checkerboard even",
-    "spatial-checker-odd": "Spatial — checkerboard odd",
-    "spatial-grid2": "Spatial — grid 2×2",
-    "spatial-grid4": "Spatial — grid 4×4",
-    "spatial-block4": "Spatial — block 4×4, faza (1,2)",
-    "spatial-offset11": "Spatial — offset XOR (+1,+1)",
-    "spatial-offset22": "Spatial — offset XOR (+2,+2)",
-    "spatial-serpentine": "Spatial — serializacja serpentine",
-    "spatial-tile16": "Spatial — tile interleave 16×16",
-    "spatial-campaign": "Spatial — pełna kampania porównawcza",
-    "dual-weave": "Dual weave — równoległy smoke",
-    "dual-weave-stagger2": "Dual weave — row-major / stagger-2",
-    "dual-weave-lags": "Dual weave — kampania lagów",
-    "dual-weave-stagger-qualification": "Dual weave — kwalifikacja stagger-2",
-    "lsb-campaign": "LSB — pełna kampania 1..4 bitów",
-    "production-assessment": "PRODUCTION — kompleksowa macierz decyzyjna",
-    "global-all": "GLOBAL — wszystkie profile i kampanie",
-}
-
-PROFILE_HELP = {
-    "production-assessment": "Uruchamia kompleksową, faktoryzowaną macierz produkcyjną: 1–4 LSB, tryby źródła, pairing/lagi, wszystkie publiczne profile przestrzenne, sweep SHA3, dual weave i powtarzalność. Generuje jeden plik production_assessment_report.html do końcowej oceny.",
-    "lsb-campaign": "Porównuje temporal XOR, bezpośrednie Y i delta dla 1..4 dolnych bitów; generuje wspólne podsumowanie.",
-    "global-all": "Uruchamia kolejno każdy wcześniejszy profil WWW oraz pełną kampanię LSB. Kontynuuje po błędach i zapisuje raport zbiorczy.",
-    "spatial-baseline": "Pełna zamrożona maska, brak offsetu, kolejność row-major. Punkt odniesienia.",
-    "spatial-checker-even": "Jedna faza szachownicy; usuwa bezpośrednie sąsiedztwo poziome i pionowe.",
-    "spatial-checker-odd": "Komplementarna faza szachownicy do porównania asymetrii matrycy/ISP.",
-    "spatial-grid2": "Jeden piksel z każdego bloku 2×2, faza (0,0).",
-    "spatial-grid4": "Jeden piksel z każdego bloku 4×4, faza (0,0). Mocniejsze przerzedzenie.",
-    "spatial-block4": "Jedna ustalona lokalna pozycja (1,2) w każdym bloku 4×4.",
-    "spatial-offset11": "XOR bieżącego piksela ze starszym pikselem przesuniętym o +1,+1; bez zawijania.",
-    "spatial-offset22": "XOR ze starszym pikselem przesuniętym o +2,+2; bez zawijania.",
-    "spatial-serpentine": "Pełna maska, ale co drugi wiersz jest serializowany w przeciwną stronę.",
-    "spatial-tile16": "Pełna maska; kolejne bity pochodzą z tej samej pozycji lokalnej w odległych kaflach 16×16.",
-    "spatial-campaign": "Uruchamia wszystkie profile przestrzenne kolejno i buduje wspólny indeks raportów.",
 }
 
 PARAMETER_HELP = {
@@ -163,6 +93,7 @@ PARAMETER_HELP = {
     "conditioned_mib": "Docelowy rozmiar finalnego strumienia SHA3-512.",
     "diagnostic_vn_mib": "Rozmiar równoległego wyniku Von Neumanna. Jest diagnostyczny.",
     "validation_mib": "Limit plików walidacyjnych przed conditionerem.",
+    "stream_stats_window_pairs": "Liczba par w jednym oknie statystyk streamingowych. Te statystyki obejmują cały przetworzony dataset bez zapisywania pełnego strumienia raw.",
     "runs": "Liczba przebiegów używana przez profile kwalifikacyjne.",
     "first_warmup_seconds": "Warm-up pierwszego przebiegu kampanii.",
     "next_warmup_seconds": "Warm-up kolejnych przebiegów kampanii.",
@@ -282,6 +213,14 @@ def load_sources(path: Path) -> list[dict[str, Any]]:
 
 
 class JobManager:
+    """Persist and supervise compute jobs.
+
+    Live camera sources remain exclusive. Read-only dataset-y jobs may run in
+    parallel on independently allocated loopback ports.
+    """
+
+    ACTIVE_STATUSES = {"starting", "running", "stopping"}
+
     def __init__(self, settings: Settings, sources: list[dict[str, Any]], logger: logging.Logger) -> None:
         self.settings = settings
         self.sources = {item["id"]: item for item in sources}
@@ -290,9 +229,9 @@ class JobManager:
         self.jobs_root = self.state_root / "jobs"
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
-        self.process: subprocess.Popen[bytes] | None = None
-        self.active_job_id: str | None = None
-        self._recover_active_job()
+        self.processes: dict[str, subprocess.Popen[bytes]] = {}
+        self.max_dataset_jobs = max(1, int(os.environ.get("MAX_DATASET_JOBS", min(16, os.cpu_count() or 4))))
+        self._recover_active_jobs()
 
     def _job_path(self, job_id: str) -> Path:
         return self.jobs_root / f"{job_id}.json"
@@ -307,55 +246,69 @@ class JobManager:
     def _save_job(self, job: dict[str, Any]) -> None:
         atomic_json(self._job_path(str(job["id"])), job)
 
-    def _recover_active_job(self) -> None:
-        candidates: list[dict[str, Any]] = []
+    def _recover_active_jobs(self) -> None:
         for path in self.jobs_root.glob("*.json"):
             item = read_json(path)
-            if isinstance(item, dict) and item.get("status") in {"starting", "running", "stopping"}:
-                candidates.append(item)
-        candidates.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
-        for item in candidates:
+            if not isinstance(item, dict) or item.get("status") not in self.ACTIVE_STATUSES:
+                continue
             pid = int(item.get("pid") or 0)
             if is_process_alive(pid):
-                self.active_job_id = str(item["id"])
-                self.logger.warning("Odzyskano aktywny job %s z pid=%s", self.active_job_id, pid)
-                return
+                self.logger.warning("Odzyskano aktywny job %s z pid=%s", item.get("id"), pid)
+                continue
             item["status"] = "interrupted"
             item["ended_at"] = utc_now()
             item["message"] = "Proces nie działał podczas startu control servera"
             self._save_job(item)
 
-    def _reconcile(self) -> None:
-        if not self.active_job_id:
-            return
-        job = self._load_job(self.active_job_id)
-        if not job:
-            self.active_job_id = None
-            self.process = None
-            return
-        pid = int(job.get("pid") or 0)
-        if self.process is not None and self.process.poll() is not None:
-            return
-        if not is_process_alive(pid):
-            output_root = Path(str(job.get("output_root", "")))
-            ready = any(
-                output_root.joinpath(name).exists()
-                for name in ("READY.json", "qualification_report.html", "lsb_campaign_report.html", "production_assessment_report.html", "global_campaign_report.html")
+    def _finalize_dead_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        output_root = Path(str(job.get("output_root", "")))
+        ready = any(
+            output_root.joinpath(name).exists()
+            for name in (
+                "READY.json", "qualification_report.html", "lsb_campaign_report.html",
+                "production_assessment_report.html", "final_preproduction_report.html",
+                "global_campaign_report.html",
             )
-            failed = output_root.joinpath("run_failed.json").exists()
-            if output_root.is_dir() and not failed:
-                failed = any(output_root.glob("**/run_failed.json"))
-            job["status"] = "complete" if ready else "failed" if failed else "interrupted"
-            job.setdefault("ended_at", utc_now())
-            job.setdefault("message", "Stan odtworzony po restarcie control servera")
-            self._save_job(job)
-            self.active_job_id = None
-            self.process = None
+        )
+        failed = output_root.joinpath("run_failed.json").exists()
+        if output_root.is_dir() and not failed:
+            failed = any(output_root.glob("**/run_failed.json"))
+        job["status"] = "complete" if ready else "failed" if failed else "interrupted"
+        job.setdefault("ended_at", utc_now())
+        job.setdefault("message", "Stan odtworzony po restarcie control servera")
+        self._save_job(job)
+        return job
 
-    def current(self) -> dict[str, Any] | None:
+    def _reconcile_all(self) -> None:
+        for path in self.jobs_root.glob("*.json"):
+            job = read_json(path)
+            if not isinstance(job, dict) or job.get("status") not in self.ACTIVE_STATUSES:
+                continue
+            job_id = str(job.get("id", ""))
+            process = self.processes.get(job_id)
+            if process is not None and process.poll() is None:
+                continue
+            pid = int(job.get("pid") or 0)
+            if not is_process_alive(pid):
+                self._finalize_dead_job(job)
+                self.processes.pop(job_id, None)
+
+    def active_jobs(self) -> list[dict[str, Any]]:
         with self.lock:
-            self._reconcile()
-            return self._load_job(self.active_job_id) if self.active_job_id else None
+            self._reconcile_all()
+            rows = [
+                item for item in self.list_jobs(limit=500)
+                if item.get("status") in self.ACTIVE_STATUSES
+            ]
+            rows.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+            return rows
+
+    def current(self, job_id: str | None = None) -> dict[str, Any] | None:
+        with self.lock:
+            active = self.active_jobs()
+            if job_id is not None:
+                return next((item for item in active if str(item.get("id")) == job_id), None)
+            return active[0] if active else None
 
     def list_jobs(self, limit: int = 30) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -365,6 +318,20 @@ class JobManager:
                 rows.append(item)
         rows.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
         return rows[:limit]
+
+    def _allocate_worker_port(self, span: int = 1) -> int:
+        if span < 1 or span > 64:
+            raise ValueError("Nieprawidłowy rozmiar rezerwacji portów")
+        active_ports: set[int] = set()
+        for job in self.active_jobs():
+            base = int(job.get("worker_port") or 0)
+            reserved = max(1, int(job.get("worker_port_span") or 1))
+            if base > 0:
+                active_ports.update(range(base, base + reserved))
+        for port in range(self.settings.worker_port, self.settings.worker_port + 256 - span):
+            if all(candidate not in active_ports for candidate in range(port, port + span)):
+                return port
+        raise RuntimeError("Brak wolnego zakresu portów workera w puli control servera")
 
     @staticmethod
     def _positive_int(payload: dict[str, Any], name: str, minimum: int, maximum: int) -> int | None:
@@ -379,7 +346,7 @@ class JobManager:
             raise ValueError(f"{name} musi być w zakresie {minimum}..{maximum}")
         return number
 
-    def _prepare_dataset_environment(self, env: dict[str, str]) -> None:
+    def _prepare_dataset_environment(self, env: dict[str, str]) -> dict[str, Any]:
         raw_dir = str(env.get("DATASET_DIR", "data/frame-buffer-latest")).strip()
         if not raw_dir:
             raw_dir = "data/frame-buffer-latest"
@@ -455,9 +422,17 @@ class JobManager:
         env["DATASET_DIR"] = str(dataset_dir)
         env["WIDTH"] = str(width)
         env["HEIGHT"] = str(height)
+        env["DATASET_AVAILABLE_FRAMES"] = str(frame_count)
+        env["DATASET_STATUS"] = status
+        return manifest
 
     def _build_environment(
-        self, payload: dict[str, Any], source: dict[str, Any], profile: str, job_id: str
+        self,
+        payload: dict[str, Any],
+        source: dict[str, Any],
+        profile: str,
+        job_id: str,
+        worker_port: int,
     ) -> tuple[dict[str, str], str, Path]:
         env = os.environ.copy()
         env.update(source["env"])
@@ -466,42 +441,89 @@ class JobManager:
         env["HOST"] = self.settings.worker_host
         env["API_HOST"] = self.settings.worker_host
         env["DISPLAY_HOST"] = "127.0.0.1"
-        env["PORT"] = str(self.settings.worker_port)
+        env["PORT"] = str(worker_port)
+        env["WORKER_PORT_BASE"] = str(worker_port)
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "UTF-8"
+
+        dataset_manifest: dict[str, Any] | None = None
         if source["source_type"] == "dataset-y":
-            self._prepare_dataset_environment(env)
+            dataset_manifest = self._prepare_dataset_environment(env)
+            scope = str(payload.get("dataset_scope", "output-limit")).strip().lower() or "output-limit"
+            if profile == "final-preproduction":
+                scope = "all-available"
+            if scope not in {"output-limit", "all-available", "range", "follow"}:
+                raise ValueError("dataset_scope musi być output-limit, all-available, range albo follow")
+            start_frame = self._positive_int(payload, "dataset_start_frame", 0, 10**12) or 0
+            max_frames = self._positive_int(payload, "dataset_max_frames", 0, 10**12) or 0
+            available = int(dataset_manifest.get("frame_count", 0) or 0)
+            status = str(dataset_manifest.get("status", ""))
+            if scope == "all-available":
+                if available < 2:
+                    raise ValueError("Dataset nie ma jeszcze wystarczającej liczby opublikowanych klatek")
+                start_frame = 0
+                max_frames = available
+                env["DATASET_FOLLOW"] = "0"
+                env["EXIT_ON_OUTPUT_LIMIT"] = "0"
+            elif scope == "range":
+                if max_frames <= 0:
+                    raise ValueError("Zakres datasetu wymaga DATASET_MAX_FRAMES > 0")
+                if available and start_frame >= available:
+                    raise ValueError(f"Początek zakresu {start_frame} przekracza dostępne klatki ({available})")
+                max_frames = min(max_frames, max(0, available - start_frame)) if available else max_frames
+                env["DATASET_FOLLOW"] = "0"
+                env["EXIT_ON_OUTPUT_LIMIT"] = "0"
+            elif scope == "follow":
+                env["DATASET_FOLLOW"] = "1"
+                max_frames = 0
+                env["EXIT_ON_OUTPUT_LIMIT"] = "1"
+            else:
+                env["DATASET_FOLLOW"] = "1" if status == "recording" and bool(payload.get("dataset_follow", False)) else "0"
+                env["EXIT_ON_OUTPUT_LIMIT"] = "1"
+            env["DATASET_SCOPE"] = scope
+            env["DATASET_START_FRAME"] = str(start_frame)
+            env["DATASET_MAX_FRAMES"] = str(max_frames)
+            env["DATASET_VERIFY_HASHES"] = "1" if profile == "final-preproduction" or payload.get("dataset_verify_hashes", False) else "0"
+            env["DATASET_REALTIME"] = "1" if payload.get("dataset_realtime", False) else "0"
+        else:
+            if str(payload.get("dataset_scope", "output-limit")) not in {"", "output-limit"}:
+                raise ValueError("Zakres datasetu jest dostępny wyłącznie dla źródła dataset-y")
+
         env["WEB_IMAGES"] = "1" if payload.get("web_images", False) else "0"
         env["MASK_SNAPSHOT_IMAGES"] = "1" if payload.get("mask_snapshot_images", False) else "0"
-        env["LIVE_BYTE_DIAGNOSTICS"] = "1" if payload.get("live_byte_diagnostics", True) else "0"
+        env["LIVE_BYTE_DIAGNOSTICS"] = "1" if payload.get("live_byte_diagnostics", False) else "0"
 
         exposure = self._positive_int(payload, "exposure", 1, 1_000_000)
         warmup = self._positive_int(payload, "warmup_seconds", 0, 86_400)
         calibration = self._positive_int(payload, "calibration_pairs", 32, 1_000_000)
         pair_lag = self._positive_int(payload, "pair_lag_frames", 1, 4096)
         lsb_bits = self._positive_int(payload, "lsb_bits", 1, 4)
+        vn_passes = self._positive_int(payload, "von_neumann_passes", 0, 4)
+        pairing_mode = str(payload.get("pairing_mode", "")).strip()
+        if pairing_mode and pairing_mode not in {"disjoint", "sliding"}:
+            raise ValueError("pairing_mode musi być disjoint albo sliding")
+        conditioner = str(payload.get("conditioner", "sha3-512")).strip().lower() or "sha3-512"
+        if conditioner not in {"sha3-512", "none"}:
+            raise ValueError("conditioner musi być sha3-512 albo none")
         assessment_level = str(payload.get("assessment_level", "full")).strip().lower() or "full"
         if assessment_level not in {"quick", "full", "exhaustive"}:
-            raise ValueError("assessment_level must be quick, full or exhaustive")
+            raise ValueError("assessment_level musi być quick, full albo exhaustive")
         env["ASSESSMENT_LEVEL"] = assessment_level
         sample_mode = str(payload.get("sample_mode", "")).strip()
         if sample_mode and sample_mode not in {"xor", "direct", "delta"}:
-            raise ValueError("sample_mode must be xor, direct or delta")
-        # Browsers localize number fields (for example 1,0 in Polish locales).
-        # The control page serializes valueAsNumber, but accept a decimal comma as
-        # a defensive fallback for API clients and older cached frontends.
-        entropy_credit_raw = (
-            str(payload.get("entropy_credit_bits_per_pixel", "")).strip().replace(",", ".")
-        )
+            raise ValueError("sample_mode musi być xor, direct albo delta")
+
+        entropy_credit_raw = str(payload.get("entropy_credit_bits_per_pixel", "")).strip().replace(",", ".")
         entropy_credit: float | None = None
         if entropy_credit_raw:
             try:
                 entropy_credit = float(entropy_credit_raw)
             except ValueError as exc:
-                raise ValueError("entropy_credit_bits_per_pixel must be a number") from exc
+                raise ValueError("entropy_credit_bits_per_pixel musi być liczbą") from exc
             effective_lsb_bits = lsb_bits if lsb_bits is not None else int(env.get("LSB_BITS", "1"))
             if not 0.0 < entropy_credit <= effective_lsb_bits:
-                raise ValueError("entropy_credit_bits_per_pixel must be in (0, lsb_bits]")
+                raise ValueError("entropy_credit_bits_per_pixel musi być w (0, lsb_bits]")
+
         conditioner_input = self._positive_int(payload, "conditioner_input_bits", 512, 1_048_576)
         runs = self._positive_int(payload, "runs", 1, 100)
         first_warmup = self._positive_int(payload, "first_warmup_seconds", 0, 86_400)
@@ -512,53 +534,49 @@ class JobManager:
         source_frame_timeout = self._positive_int(payload, "source_frame_timeout_seconds", 5, 3600)
         source_reconnect_attempts = self._positive_int(payload, "source_reconnect_attempts", 0, 100)
         source_reconnect_backoff = self._positive_int(payload, "source_reconnect_backoff_seconds", 0, 300)
+        stream_stats_window_pairs = self._positive_int(payload, "stream_stats_window_pairs", 1, 1_000_000)
 
-        if exposure is not None:
-            env["EXPOSURE"] = str(exposure)
-        if warmup is not None:
-            env["WARMUP_SECONDS"] = str(warmup)
-        if calibration is not None:
-            env["CALIBRATION_PAIRS"] = str(calibration)
-        if pair_lag is not None:
-            env["PAIR_LAG_FRAMES"] = str(pair_lag)
-        if lsb_bits is not None:
-            env["LSB_BITS"] = str(lsb_bits)
+        for value, key in (
+            (exposure, "EXPOSURE"), (warmup, "WARMUP_SECONDS"),
+            (calibration, "CALIBRATION_PAIRS"), (pair_lag, "PAIR_LAG_FRAMES"),
+            (lsb_bits, "LSB_BITS"), (runs, "RUNS"),
+            (first_warmup, "FIRST_WARMUP_SECONDS"), (next_warmup, "NEXT_WARMUP_SECONDS"),
+            (live_heatmap_interval, "LIVE_HEATMAP_INTERVAL_SECONDS"),
+            (live_heatmap_max_stages, "LIVE_HEATMAP_MAX_STAGES"),
+            (live_heatmap_min_bytes, "LIVE_HEATMAP_MIN_BYTES"),
+            (source_frame_timeout, "SOURCE_FRAME_TIMEOUT_SECONDS"),
+            (source_reconnect_attempts, "SOURCE_RECONNECT_ATTEMPTS"),
+            (source_reconnect_backoff, "SOURCE_RECONNECT_BACKOFF_SECONDS"),
+            (stream_stats_window_pairs, "STREAM_STATS_WINDOW_PAIRS"),
+        ):
+            if value is not None:
+                env[key] = str(value)
+        if pairing_mode:
+            env["PAIRING_MODE"] = pairing_mode
         if sample_mode:
             env["SAMPLE_MODE"] = sample_mode
         if entropy_credit is not None:
             env["ENTROPY_CREDIT_BITS_PER_PIXEL"] = format(entropy_credit, ".12g")
-        if conditioner_input is not None:
+        if vn_passes is not None:
+            env["VON_NEUMANN_PASSES"] = str(vn_passes)
+            env["ENABLE_VON_NEUMANN"] = "1" if vn_passes > 0 else "0"
+        env["CONDITIONER"] = conditioner
+        if conditioner == "none":
+            env["CONDITIONED_BYTES"] = "0"
+        elif conditioner_input is not None:
             if conditioner_input % 8:
                 raise ValueError("conditioner_input_bits musi być wielokrotnością 8")
             env["CONDITIONER_INPUT_BITS"] = str(conditioner_input)
-        if runs is not None:
-            env["RUNS"] = str(runs)
-        if first_warmup is not None:
-            env["FIRST_WARMUP_SECONDS"] = str(first_warmup)
-        if next_warmup is not None:
-            env["NEXT_WARMUP_SECONDS"] = str(next_warmup)
-        if live_heatmap_interval is not None:
-            env["LIVE_HEATMAP_INTERVAL_SECONDS"] = str(live_heatmap_interval)
-        if live_heatmap_max_stages is not None:
-            env["LIVE_HEATMAP_MAX_STAGES"] = str(live_heatmap_max_stages)
-        if live_heatmap_min_bytes is not None:
-            env["LIVE_HEATMAP_MIN_BYTES"] = str(live_heatmap_min_bytes)
-        if source_frame_timeout is not None:
-            env["SOURCE_FRAME_TIMEOUT_SECONDS"] = str(source_frame_timeout)
-        if source_reconnect_attempts is not None:
-            env["SOURCE_RECONNECT_ATTEMPTS"] = str(source_reconnect_attempts)
-        if source_reconnect_backoff is not None:
-            env["SOURCE_RECONNECT_BACKOFF_SECONDS"] = str(source_reconnect_backoff)
 
         spatial_mask_pattern = str(payload.get("spatial_mask_pattern", "")).strip()
         if spatial_mask_pattern:
             if spatial_mask_pattern not in {"legacy", "full", "checkerboard-even", "checkerboard-odd", "grid", "block"}:
-                raise ValueError("invalid spatial_mask_pattern")
+                raise ValueError("Nieprawidłowy spatial_mask_pattern")
             env["SPATIAL_MASK_PATTERN"] = spatial_mask_pattern
         serialization_order = str(payload.get("serialization_order", "")).strip()
         if serialization_order:
             if serialization_order not in {"row-major", "serpentine", "tile-interleave"}:
-                raise ValueError("invalid serialization_order")
+                raise ValueError("Nieprawidłowy serialization_order")
             env["SERIALIZATION_ORDER"] = serialization_order
         for payload_key, env_key, minimum, maximum in (
             ("spatial_step_x", "SPATIAL_STEP_X", 1, 4096),
@@ -569,15 +587,19 @@ class JobManager:
             ("spatial_block_height", "SPATIAL_BLOCK_HEIGHT", 1, 4096),
             ("serialization_tile_width", "SERIALIZATION_TILE_WIDTH", 1, 4096),
             ("serialization_tile_height", "SERIALIZATION_TILE_HEIGHT", 1, 4096),
+            ("clip_fail_consecutive", "CLIP_FAIL_CONSECUTIVE", 1, 1000),
+            ("control_check_seconds", "CONTROL_CHECK_SECONDS", 0, 86400),
+            ("control_fail_consecutive", "CONTROL_FAIL_CONSECUTIVE", 1, 1000),
+            ("shadow_fail_consecutive", "SHADOW_FAIL_CONSECUTIVE", 1, 1000),
         ):
             raw = str(payload.get(payload_key, "")).strip()
             if raw:
                 try:
                     number = int(raw)
                 except ValueError as exc:
-                    raise ValueError(f"{payload_key} must be an integer") from exc
+                    raise ValueError(f"{payload_key} musi być liczbą całkowitą") from exc
                 if not minimum <= number <= maximum:
-                    raise ValueError(f"{payload_key} must be in [{minimum}, {maximum}]")
+                    raise ValueError(f"{payload_key} musi być w zakresie {minimum}..{maximum}")
                 env[env_key] = str(number)
         for payload_key, env_key in (
             ("temporal_spatial_offset_x", "TEMPORAL_SPATIAL_OFFSET_X"),
@@ -588,24 +610,44 @@ class JobManager:
                 try:
                     number = int(raw)
                 except ValueError as exc:
-                    raise ValueError(f"{payload_key} must be an integer") from exc
+                    raise ValueError(f"{payload_key} musi być liczbą całkowitą") from exc
                 if not -4096 <= number <= 4096:
-                    raise ValueError(f"{payload_key} must be in [-4096, 4096]")
+                    raise ValueError(f"{payload_key} musi być w zakresie -4096..4096")
                 env[env_key] = str(number)
+
+        for payload_key, env_key, minimum, maximum in (
+            ("mask_p1_min", "MASK_P1_MIN", 0.000001, 0.999999),
+            ("mask_p1_max", "MASK_P1_MAX", 0.000001, 0.999999),
+            ("mask_transition_min", "MASK_TRANSITION_MIN", 0.000001, 0.999999),
+            ("mask_transition_max", "MASK_TRANSITION_MAX", 0.000001, 0.999999),
+            ("mask_clip_max", "MASK_CLIP_MAX", 0.0, 1.0),
+            ("max_active_clip_rate", "MAX_ACTIVE_CLIP_RATE", 0.0, 1.0),
+            ("shadow_min_active_retention", "SHADOW_MIN_ACTIVE_RETENTION", 0.000001, 1.0),
+            ("shadow_min_jaccard", "SHADOW_MIN_JACCARD", 0.000001, 1.0),
+        ):
+            raw = str(payload.get(payload_key, "")).strip().replace(",", ".")
+            if raw:
+                try:
+                    number = float(raw)
+                except ValueError as exc:
+                    raise ValueError(f"{payload_key} musi być liczbą") from exc
+                if not minimum <= number <= maximum:
+                    raise ValueError(f"{payload_key} musi być w zakresie {minimum}..{maximum}")
+                env[env_key] = format(number, ".12g")
+        if float(env.get("MASK_P1_MIN", "0.30")) >= float(env.get("MASK_P1_MAX", "0.70")):
+            raise ValueError("MASK_P1_MIN musi być mniejsze od MASK_P1_MAX")
+        if float(env.get("MASK_TRANSITION_MIN", "0.20")) >= float(env.get("MASK_TRANSITION_MAX", "0.80")):
+            raise ValueError("MASK_TRANSITION_MIN musi być mniejsze od MASK_TRANSITION_MAX")
 
         spatial = str(payload.get("spatial_sampling", "")).strip()
         if spatial:
             if spatial not in ALLOWED_SPATIAL:
                 raise ValueError("Nieobsługiwane spatial_sampling")
             env["SPATIAL_SAMPLING"] = spatial
-
         pattern = env.get("SPATIAL_MASK_PATTERN", "legacy")
-        step_x = int(env.get("SPATIAL_STEP_X", "1"))
-        step_y = int(env.get("SPATIAL_STEP_Y", "1"))
-        phase_x = int(env.get("SPATIAL_PHASE_X", "0"))
-        phase_y = int(env.get("SPATIAL_PHASE_Y", "0"))
-        block_width = int(env.get("SPATIAL_BLOCK_WIDTH", "4"))
-        block_height = int(env.get("SPATIAL_BLOCK_HEIGHT", "4"))
+        step_x = int(env.get("SPATIAL_STEP_X", "1")); step_y = int(env.get("SPATIAL_STEP_Y", "1"))
+        phase_x = int(env.get("SPATIAL_PHASE_X", "0")); phase_y = int(env.get("SPATIAL_PHASE_Y", "0"))
+        block_width = int(env.get("SPATIAL_BLOCK_WIDTH", "4")); block_height = int(env.get("SPATIAL_BLOCK_HEIGHT", "4"))
         if pattern == "grid" and (phase_x >= step_x or phase_y >= step_y):
             raise ValueError("Dla grid faza X/Y musi być mniejsza od kroku X/Y")
         if pattern == "block" and (phase_x >= block_width or phase_y >= block_height):
@@ -619,29 +661,49 @@ class JobManager:
             mib = self._positive_int(payload, field, 0, 1_048_576)
             if mib is not None:
                 env[env_name] = str(mib * MIB)
+        if vn_passes == 0:
+            env["DIAGNOSTIC_VN_BYTES"] = "0"
+        if conditioner == "none":
+            env["CONDITIONED_BYTES"] = "0"
 
         slug = f"web-{profile}-{timestamp_slug()}-{job_id[:8]}"
-        if profile in {"qualification", "dual-weave-lags", "dual-weave-stagger-qualification", "spatial-campaign", "lsb-campaign", "production-assessment", "global-all"}:
+        campaign_profiles = {
+            "qualification", "cold-start", "dual-weave-lags", "dual-weave-stagger-qualification",
+            "spatial-campaign", "lsb-campaign", "production-assessment", "final-preproduction", "global-all",
+        }
+        if profile in campaign_profiles:
             env["CAMPAIGN"] = slug
-            output_root = self.settings.data_root / slug
         else:
             env["RUN_NAME"] = slug
-            output_root = self.settings.data_root / slug
+        output_root = self.settings.data_root / slug
         return env, slug, output_root
 
     def start(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
-            if self.current() is not None:
-                raise RuntimeError("Inny test jest już uruchomiony")
-            profile = str(payload.get("profile", "smoke"))
+            profile = str(payload.get("profile", "single"))
             if profile not in ALLOWED_PROFILES:
                 raise ValueError("Nieobsługiwany profil testu")
             source_id = str(payload.get("source_id", ""))
             source = self.sources.get(source_id)
             if source is None:
                 raise ValueError("Nieznane źródło")
+            active = self.active_jobs()
+            active_live = [j for j in active if str((j.get("source") or {}).get("source_type")) != "dataset-y"]
+            active_dataset = [j for j in active if str((j.get("source") or {}).get("source_type")) == "dataset-y"]
+            if source["source_type"] == "dataset-y":
+                if active_live:
+                    raise RuntimeError("Aktywne źródło kamery jest używane przez inny test")
+                if len(active_dataset) >= self.max_dataset_jobs:
+                    raise RuntimeError(f"Osiągnięto limit równoległych zadań dataset-y: {self.max_dataset_jobs}")
+            elif active:
+                raise RuntimeError("Źródła LIVE są wyłączne; zatrzymaj aktywne zadania przed startem")
+            if profile == "final-preproduction" and source["source_type"] != "dataset-y":
+                raise ValueError("Profil final-preproduction wymaga źródła dataset-y")
+
             job_id = uuid.uuid4().hex
-            env, slug, output_root = self._build_environment(payload, source, profile, job_id)
+            worker_port_span = 16 if profile == "final-preproduction" else 1
+            worker_port = self._allocate_worker_port(worker_port_span)
+            env, slug, output_root = self._build_environment(payload, source, profile, job_id, worker_port)
             script = (self.settings.root / ALLOWED_PROFILES[profile]).resolve()
             if not script.is_file():
                 raise RuntimeError(f"Brak skryptu profilu: {script.name}")
@@ -649,51 +711,32 @@ class JobManager:
             log_stream = log_path.open("ab", buffering=0)
             try:
                 process = subprocess.Popen(
-                    [str(script)],
-                    cwd=self.settings.root,
-                    env=env,
-                    stdout=log_stream,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
+                    [str(script)], cwd=self.settings.root, env=env,
+                    stdout=log_stream, stderr=subprocess.STDOUT, start_new_session=True,
                 )
             except OSError as exc:
                 log_stream.close()
                 self.logger.exception("Nie udało się uruchomić profilu %s", profile)
                 raise RuntimeError(f"Nie udało się uruchomić procesu: {exc}") from exc
-            # start_new_session=True makes the child the leader of a new process
-            # group, so PGID is deterministically equal to PID. Calling
-            # os.getpgid(pid) here races with scripts that exit immediately and
-            # previously produced an unhandled ProcessLookupError / HTTP 500.
-            process_group_id = process.pid
             job = {
-                "id": job_id,
-                "slug": slug,
-                "profile": profile,
-                "source": redact_source(source),
-                "status": "running",
-                "created_at": utc_now(),
-                "started_at": utc_now(),
-                "ended_at": None,
-                "pid": process.pid,
-                "pgid": process_group_id,
-                "returncode": None,
-                "worker_url": f"http://{self.settings.worker_host}:{self.settings.worker_port}",
-                "output_root": str(output_root),
-                "log_file": str(log_path),
-                "requested": {k: v for k, v in payload.items() if k not in {"csrf_token"}},
+                "id": job_id, "slug": slug, "profile": profile,
+                "source": redact_source(source), "status": "running",
+                "created_at": utc_now(), "started_at": utc_now(), "ended_at": None,
+                "pid": process.pid, "pgid": process.pid, "returncode": None,
+                "worker_port": worker_port,
+                "worker_port_span": worker_port_span,
+                "worker_url": f"http://{self.settings.worker_host}:{worker_port}",
+                "output_root": str(output_root), "log_file": str(log_path),
+                "requested": {k: v for k, v in payload.items() if k != "csrf_token"},
                 "message": "Test uruchomiony",
             }
             self._save_job(job)
-            self.process = process
-            self.active_job_id = job_id
-            thread = threading.Thread(
-                target=self._watch_process,
-                args=(process, job_id, log_stream),
-                name=f"job-{job_id[:8]}",
-                daemon=True,
-            )
-            thread.start()
-            self.logger.info("Uruchomiono job %s, pid=%s, profile=%s", job_id, process.pid, profile)
+            self.processes[job_id] = process
+            threading.Thread(
+                target=self._watch_process, args=(process, job_id, log_stream),
+                name=f"job-{job_id[:8]}", daemon=True,
+            ).start()
+            self.logger.info("Uruchomiono job %s, pid=%s, port=%s, profile=%s", job_id, process.pid, worker_port, profile)
             return job
 
     def _watch_process(self, process: subprocess.Popen[bytes], job_id: str, log_stream: Any) -> None:
@@ -708,25 +751,20 @@ class JobManager:
             job["returncode"] = returncode
             job["ended_at"] = utc_now()
             if previous == "stopping":
-                job["status"] = "stopped"
-                job["message"] = "Test zatrzymany przez operatora"
+                job["status"] = "stopped"; job["message"] = "Test zatrzymany przez operatora"
             elif returncode == 0:
-                job["status"] = "complete"
-                job["message"] = "Test i analizy zakończone"
+                job["status"] = "complete"; job["message"] = "Test i analizy zakończone"
             else:
-                job["status"] = "failed"
-                job["message"] = f"Proces zakończył się kodem {returncode}"
+                job["status"] = "failed"; job["message"] = f"Proces zakończył się kodem {returncode}"
             self._save_job(job)
-            if self.active_job_id == job_id:
-                self.active_job_id = None
-                self.process = None
+            self.processes.pop(job_id, None)
             self.logger.info("Job %s zakończony rc=%s", job_id, returncode)
 
-    def stop(self) -> dict[str, Any]:
+    def stop(self, job_id: str | None = None) -> dict[str, Any]:
         with self.lock:
-            job = self.current()
+            job = self.current(job_id) if job_id else self.current()
             if job is None:
-                raise RuntimeError("Brak aktywnego testu")
+                raise RuntimeError("Brak aktywnego testu" if not job_id else "Nie znaleziono aktywnego testu")
             job["status"] = "stopping"
             job["message"] = "Wysyłanie SIGTERM do grupy procesów"
             self._save_job(job)
@@ -737,7 +775,11 @@ class JobManager:
                 os.killpg(pgid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            threading.Thread(target=self._force_kill_after_timeout, args=(str(job["id"]), pgid), daemon=True, name=f"stop-{str(job['id'])[:8]}").start()
+            threading.Thread(
+                target=self._force_kill_after_timeout,
+                args=(str(job["id"]), pgid), daemon=True,
+                name=f"stop-{str(job['id'])[:8]}",
+            ).start()
             return job
 
     def _force_kill_after_timeout(self, job_id: str, pgid: int) -> None:
@@ -863,18 +905,21 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
         lsb_campaign = path / "lsb_campaign_report.html"
         global_campaign = path / "global_campaign_report.html"
         production_assessment = path / "production_assessment_report.html"
+        final_preproduction = path / "final_preproduction_report.html"
         report = path / "run_report.html"
         status = "running/incomplete"
         if failed.exists():
             status = "failed"
-        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists() or lsb_campaign.exists() or production_assessment.exists() or global_campaign.exists():
+        elif qualification.exists() or dual_campaign.exists() or spatial_campaign.exists() or lsb_campaign.exists() or production_assessment.exists() or final_preproduction.exists() or global_campaign.exists():
             status = "complete"
         elif ready.exists():
             status = "ready"
         elif (path / "output_complete.json").exists():
             status = "analyzing"
         report_url = (
-            f"/data/{path.name}/production_assessment_report.html"
+            f"/data/{path.name}/final_preproduction_report.html"
+            if final_preproduction.exists()
+            else f"/data/{path.name}/production_assessment_report.html"
             if production_assessment.exists()
             else f"/data/{path.name}/global_campaign_report.html"
             if global_campaign.exists()
@@ -891,6 +936,7 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             else None
         )
         report_label = (
+            "Final preproduction" if final_preproduction.exists() else
             "Production assessment" if production_assessment.exists() else
             "Global campaign" if global_campaign.exists() else
             "LSB campaign" if lsb_campaign.exists() else
@@ -900,7 +946,11 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
             "Raport przebiegu" if report.exists() else "Brak raportu"
         )
         headline = ""
-        if production_assessment.exists():
+        if final_preproduction.exists():
+            assessment = read_json_object(path / "final_preproduction_summary.json")
+            decision = assessment.get("decision", {}) if isinstance(assessment.get("decision"), dict) else {}
+            headline = f"production ready: {'YES' if decision.get('production_ready') else 'NO'} · {decision.get('production_candidate') or '—'}"
+        elif production_assessment.exists():
             assessment = read_json_object(path / "production_assessment_summary.json")
             status_summary = assessment.get("status", {}) if isinstance(assessment.get("status"), dict) else {}
             headline = (
@@ -970,8 +1020,8 @@ def scan_data_root(root: Path, limit: int = 200) -> list[dict[str, Any]]:
     return rows[:limit]
 
 
-def proxy_worker(settings: Settings, path: str) -> Response:
-    url = f"http://{settings.worker_host}:{settings.worker_port}/{path.lstrip('/')}"
+def proxy_worker(settings: Settings, worker_port: int, path: str) -> Response:
+    url = f"http://{settings.worker_host}:{worker_port}/{path.lstrip('/')}"
     if request.query_string:
         url += "?" + request.query_string.decode("ascii", errors="ignore")
     try:
@@ -1092,14 +1142,8 @@ def create_app(settings: Settings) -> Flask:
             version=APP_VERSION,
             csrf_token=auth.csrf(),
             sources=[redact_source(item) for item in sources],
-            profiles=[
-                {
-                    "id": profile_id,
-                    "label": PROFILE_LABELS.get(profile_id, profile_id),
-                    "help": PROFILE_HELP.get(profile_id, ""),
-                }
-                for profile_id in ALLOWED_PROFILES
-            ],
+            default_source_id=("buffered-latest" if any(item.get("id") == "buffered-latest" for item in sources) else str(sources[0]["id"])),
+            profiles=profile_rows(),
             parameter_help=PARAMETER_HELP,
             worker_port=settings.worker_port,
             share_url=(f"/share/{share_token}/" if share_token else None),
@@ -1107,15 +1151,21 @@ def create_app(settings: Settings) -> Flask:
 
     @app.get("/api/control/status")
     def api_control_status() -> Response:
-        current = manager.current()
-        jobs = manager.list_jobs(10)
+        active = manager.active_jobs()
+        current = active[0] if active else None
+        jobs = manager.list_jobs(30)
+        dataset_active = sum(1 for item in active if str((item.get("source") or {}).get("source_type")) == "dataset-y")
         return jsonify(
             {
                 "version": APP_VERSION,
                 "current": current,
+                "active": active,
+                "active_count": len(active),
+                "dataset_active": dataset_active,
+                "max_dataset_jobs": manager.max_dataset_jobs,
                 "jobs": jobs,
-                "runs": scan_data_root(settings.data_root, 20),
-                "worker_available": current is not None,
+                "runs": scan_data_root(settings.data_root, 30),
+                "worker_available": bool(active),
                 "csrf_token": auth.csrf(),
             }
         )
@@ -1128,8 +1178,10 @@ def create_app(settings: Settings) -> Flask:
         try:
             job = manager.start(payload)
             return jsonify({"ok": True, "job": job}), 201
-        except (ValueError, RuntimeError) as exc:
-            return jsonify({"error": str(exc)}), 409 if "już" in str(exc) else 400
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 409
         except Exception as exc:  # defensive boundary for the public control API
             logger.exception("Nieoczekiwany błąd podczas uruchamiania joba")
             return jsonify({"error": f"Nieoczekiwany błąd startu: {type(exc).__name__}: {exc}"}), 500
@@ -1138,6 +1190,16 @@ def create_app(settings: Settings) -> Flask:
     def api_stop_job() -> Response:
         try:
             job = manager.stop()
+            return jsonify({"ok": True, "job": job})
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 409
+
+    @app.post("/api/jobs/<job_id>/stop")
+    def api_stop_specific_job(job_id: str) -> Response:
+        if not job_id.isalnum() or len(job_id) > 64:
+            abort(404)
+        try:
+            job = manager.stop(job_id)
             return jsonify({"ok": True, "job": job})
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 409
@@ -1163,53 +1225,76 @@ def create_app(settings: Settings) -> Flask:
     def api_runs() -> Response:
         return jsonify({"runs": scan_data_root(settings.data_root)})
 
+    def selected_preview_job() -> dict[str, Any] | None:
+        requested = str(request.args.get("job", "")).strip()
+        if requested:
+            job = manager.current(requested)
+            if job is not None:
+                session["preview_job_id"] = requested
+                return job
+        remembered = str(session.get("preview_job_id", ""))
+        if remembered:
+            job = manager.current(remembered)
+            if job is not None:
+                return job
+        return manager.current()
+
     @app.get("/live")
     def live() -> Response:
-        if manager.current() is None:
+        job = selected_preview_job()
+        if job is None:
             return Response("<h1>Brak aktywnego workera</h1><p><a href='/'>Wróć do panelu</a></p>", 503, content_type="text/html; charset=utf-8")
-        return proxy_worker(settings, "/")
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), "/")
 
     # Compatibility/proxy endpoints expected by the compute worker's live UI.
     @app.get("/api/stats")
     @app.get("/api/status")
     def worker_stats() -> Response:
-        return proxy_worker(settings, request.path)
+        job = selected_preview_job()
+        if job is None:
+            return jsonify({"error": "worker_unavailable"}), 503
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), request.path)
 
     @app.get("/api/mask-drift-history")
     def worker_mask_history() -> Response:
-        return proxy_worker(settings, request.path)
+        job = selected_preview_job()
+        if job is None:
+            return jsonify({"error": "worker_unavailable"}), 503
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), request.path)
 
     @app.get("/api/byte-diagnostics")
     def worker_byte_diagnostics() -> Response:
-        return proxy_worker(settings, request.path)
+        job = selected_preview_job()
+        if job is None:
+            return jsonify({"error": "worker_unavailable"}), 503
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), request.path)
 
     @app.get("/worker-health")
     def worker_health() -> Response:
-        return proxy_worker(settings, "/health")
+        job = selected_preview_job()
+        if job is None:
+            return jsonify({"error": "worker_unavailable"}), 503
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), "/health")
+
+    def proxy_asset(path: str) -> Response:
+        job = selected_preview_job()
+        if job is None:
+            return jsonify({"error": "worker_unavailable"}), 503
+        return proxy_worker(settings, int(job.get("worker_port") or settings.worker_port), path)
 
     for endpoint in (
-        "frame.jpg",
-        "y.png",
-        "lsb_change.png",
-        "mask_active.png",
-        "mask.png",
-        "mask_shadow.png",
-        "mask_difference.png",
-        "mask_active_overlay.png",
-        "mask_overlay.png",
-        "mask_shadow_overlay.png",
-        "live_byte_heatmaps.png",
+        "frame.jpg", "y.png", "lsb_change.png", "mask_active.png", "mask.png",
+        "mask_shadow.png", "mask_difference.png", "mask_active_overlay.png",
+        "mask_overlay.png", "mask_shadow_overlay.png", "live_byte_heatmaps.png",
     ):
         app.add_url_rule(
-            f"/{endpoint}",
-            endpoint=f"proxy_{endpoint.replace('.', '_')}",
-            view_func=(lambda path=endpoint: proxy_worker(settings, "/" + path)),
-            methods=["GET"],
+            f"/{endpoint}", endpoint=f"proxy_{endpoint.replace('.', '_')}",
+            view_func=(lambda path=endpoint: proxy_asset("/" + path)), methods=["GET"],
         )
 
     @app.get("/download/<path:name>")
     def worker_download(name: str) -> Response:
-        return proxy_worker(settings, "/download/" + name)
+        return proxy_asset("/download/" + name)
 
 
     @app.get("/share/<token>/")

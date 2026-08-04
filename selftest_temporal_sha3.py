@@ -24,6 +24,7 @@ except ModuleNotFoundError:
     sys.modules["flask"] = module
 
 import camera_entropy_server as server
+from profile_catalog import ALLOWED_PROFILES
 
 
 def main() -> int:
@@ -46,15 +47,16 @@ def main() -> int:
     assert 'WEB_IMAGES="${WEB_IMAGES:-0}"' in runner
     assert 'MASK_SNAPSHOT_IMAGES="${MASK_SNAPSHOT_IMAGES:-0}"' in runner
     assert '"$mask_snapshot_images_flag" "$vn_stage_flag"' in runner
-    assert '"temporal-sha3": "smoke_temporal_sha3.sh"' in control
+    assert ALLOWED_PROFILES["temporal-sha3"] == "smoke_temporal_sha3.sh"
     assert 'payload.get("web_images", False)' in control
     assert 'payload.get("mask_snapshot_images", False)' in control
-    assert '{% for p in profiles %}' in control_html
+    assert "profiles|groupby('category')" in control_html
     assert 'value="{{ p.id }}"' in control_html
     assert 'id="web_images" name="web_images" type="checkbox"' in control_html
     assert 'id="mask_snapshot_images" name="mask_snapshot_images" type="checkbox"' in control_html
     assert "if self.args.mask_snapshot_images:" in worker_source
-    assert "if self.args.von_neumann_stage and" in worker_source
+    assert "repeated_von_neumann(" in worker_source
+    assert "self.args.von_neumann_passes" in worker_source
 
 
     # Drift metrics must remain available when periodic mask PNGs are disabled.

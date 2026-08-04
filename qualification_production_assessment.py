@@ -20,7 +20,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-APP_VERSION = "2026.08.03.camera-entropy-production-assessment.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-production-assessment.7.12.0"
 MAX_LSB_BITS = 4
 ROOT = Path(__file__).resolve().parent
 

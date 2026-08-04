@@ -21,7 +21,7 @@ import numpy as np
 
 from frame_sources import create_frame_source
 
-APP_VERSION = "2026.08.03.camera-entropy-frame-buffer.7.11.0"
+APP_VERSION = "2026.08.04.camera-entropy-frame-buffer.7.12.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 DEFAULT_LIMIT_BYTES = 300_000_000_000
 DEFAULT_CHUNK_BYTES = 1_073_741_824
