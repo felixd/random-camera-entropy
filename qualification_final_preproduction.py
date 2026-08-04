@@ -10,23 +10,25 @@ parallel because dataset-y is read-only.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
+import argparse
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import threading
+import time
 from typing import Any
 
 from report_ui import RawHtml, chart_div, esc, fmt, html_page, metric_card, metrics_grid, rate_span, rate_unit_selector, table_html
 from summarize_production_assessment import collect_case, finite, healthy
+from dataset_integrity import verify_dataset_chunks
 
-APP_VERSION = "2026.08.04.camera-entropy-final-preproduction.7.12.0"
+APP_VERSION = "2026.08.04.camera-entropy-final-preproduction.7.13.0"
 ROOT = Path(__file__).resolve().parent
 _STOP = threading.Event()
 _CHILDREN: dict[str, subprocess.Popen[str]] = {}
@@ -52,8 +54,8 @@ def read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
-def dataset_snapshot() -> tuple[Path, dict[str, Any]]:
-    raw = os.environ.get("DATASET_DIR", "data/frame-buffer-latest")
+def dataset_snapshot(raw: str | None = None) -> tuple[Path, dict[str, Any]]:
+    raw = raw or os.environ.get("DATASET_DIR", "data/frame-buffer-latest")
     path = Path(raw).expanduser()
     if not path.is_absolute():
         path = ROOT / path
@@ -72,34 +74,101 @@ def dataset_snapshot() -> tuple[Path, dict[str, Any]]:
     return path, manifest
 
 
-def verify_closed_chunks(dataset: Path) -> dict[str, Any]:
-    checksum_file = dataset / "checksums.sha256"
-    if not checksum_file.is_file():
-        raise RuntimeError(f"Brak {checksum_file}")
-    checked = 0
-    checked_bytes = 0
-    for line_no, line in enumerate(checksum_file.read_text(encoding="utf-8").splitlines(), 1):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split(maxsplit=1)
-        if len(parts) != 2:
-            raise RuntimeError(f"Nieprawidłowy wpis checksums.sha256 w linii {line_no}")
-        expected, relative = parts
-        relative = relative.lstrip("* ")
-        target = dataset / relative
-        if not target.is_file():
-            raise RuntimeError(f"Brak chunku wymienionego w checksums.sha256: {target}")
-        digest = hashlib.sha256()
-        with target.open("rb") as stream:
-            while block := stream.read(8 * 1024 * 1024):
-                digest.update(block)
-                checked_bytes += len(block)
-        actual = digest.hexdigest()
-        if actual.lower() != expected.lower():
-            raise RuntimeError(f"SHA-256 mismatch: {relative}: {actual} != {expected}")
-        checked += 1
-    return {"verified": True, "closed_chunks": checked, "bytes": checked_bytes, "completed_utc": utc_now()}
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def _human_bytes(value: float) -> str:
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    amount = float(max(0.0, value))
+    for unit in units:
+        if amount < 1024.0 or unit == units[-1]:
+            return f"{amount:.2f} {unit}"
+        amount /= 1024.0
+    return f"{amount:.2f} TiB"
+
+
+def _human_duration(seconds: float | None) -> str:
+    if seconds is None or not math_isfinite(seconds):
+        return "—"
+    seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}h {minutes:02d}m {secs:02d}s"
+    if minutes:
+        return f"{minutes:d}m {secs:02d}s"
+    return f"{secs:d}s"
+
+
+def math_isfinite(value: Any) -> bool:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return number == number and number not in {float("inf"), float("-inf")}
+
+
+def _positive_int(value: int, name: str, minimum: int, maximum: int) -> int:
+    if not minimum <= value <= maximum:
+        raise SystemExit(f"{name} musi być w zakresie {minimum}..{maximum}")
+    return value
+
+
+def parse_args() -> argparse.Namespace:
+    cpu_count = max(1, os.cpu_count() or 1)
+    default_case_workers = min(5, max(1, cpu_count // 2))
+    default_verify_workers = min(8, max(2, cpu_count // 4))
+    parser = argparse.ArgumentParser(
+        description="Ostateczna kwalifikacja przedprodukcyjna na pełnym datasecie Y8/LSB.",
+    )
+    parser.add_argument(
+        "--dataset-dir",
+        default=os.environ.get("DATASET_DIR", "data/frame-buffer-latest"),
+        help="Dataset-y; domyślnie DATASET_DIR lub data/frame-buffer-latest.",
+    )
+    parser.add_argument(
+        "--workers", type=int,
+        default=int(os.environ.get("FINAL_PREPROD_WORKERS", default_case_workers)),
+        help="Liczba równoległych wariantów analizy (1..5).",
+    )
+    parser.add_argument(
+        "--verify-workers", type=int,
+        default=int(os.environ.get("FINAL_PREPROD_VERIFY_WORKERS", os.environ.get("DATASET_VERIFY_WORKERS", default_verify_workers))),
+        help="Liczba równoległych workerów SHA-256 (1..64). Dla HDD zwykle 1–2; dla NVMe 4–16.",
+    )
+    parser.add_argument(
+        "--verify-hashes", action=argparse.BooleanOptionalAction,
+        default=_env_bool("FINAL_PREPROD_VERIFY_HASHES", _env_bool("DATASET_VERIFY_HASHES", True)),
+        help="Weryfikuj SHA-256 wszystkich zamkniętych chunków przed analizą.",
+    )
+    parser.add_argument(
+        "--verify-cache", action=argparse.BooleanOptionalAction,
+        default=_env_bool("FINAL_PREPROD_VERIFY_CACHE", True),
+        help="Ponownie użyj wyniku wcześniejszej pełnej weryfikacji, jeżeli manifest i metadane chunków są identyczne.",
+    )
+    parser.add_argument(
+        "--progress-interval", type=float,
+        default=float(os.environ.get("FINAL_PREPROD_PROGRESS_INTERVAL_SECONDS", "2")),
+        help="Co ile sekund wypisywać postęp weryfikacji.",
+    )
+    parser.add_argument(
+        "--status-interval", type=float,
+        default=float(os.environ.get("FINAL_PREPROD_STATUS_INTERVAL_SECONDS", "30")),
+        help="Co ile sekund wypisywać heartbeat trwających analiz.",
+    )
+    parser.add_argument("--campaign", default=os.environ.get("CAMPAIGN"))
+    args = parser.parse_args()
+    args.workers = _positive_int(args.workers, "--workers", 1, 5)
+    args.verify_workers = _positive_int(args.verify_workers, "--verify-workers", 1, 64)
+    if args.progress_interval <= 0:
+        parser.error("--progress-interval musi być dodatni")
+    if args.status_interval <= 0:
+        parser.error("--status-interval musi być dodatni")
+    return args
 
 
 def cases() -> list[dict[str, Any]]:
@@ -138,6 +207,7 @@ def run_case(index: int, case: dict[str, Any], campaign_dir: Path, base_env: dic
         "started_utc": utc_now(), "run_dir": f"runs/{ident}", "log": f"logs/{ident}.log",
     }
     atomic_json(state_path, state)
+    print(f"[final-preproduction] START {index:02d}/{len(cases())}: {ident} · port={port}", flush=True)
     environment = base_env | {key: str(value) for key, value in case["parameters"].items()} | {
         "PORT": str(port), "RUN_NAME": f"runs/{ident}", "RUN_DIR": str(run_dir),
     }
@@ -153,6 +223,7 @@ def run_case(index: int, case: dict[str, Any], campaign_dir: Path, base_env: dic
             _CHILDREN.pop(ident, None)
     state.update({"status": "complete" if returncode == 0 else "failed", "exit_code": returncode, "ended_utc": utc_now()})
     atomic_json(state_path, state)
+    print(f"[final-preproduction] END   {index:02d}/{len(cases())}: {ident} · {state['status']} · rc={returncode}", flush=True)
     return state
 
 
@@ -283,21 +354,108 @@ def render_report(campaign_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
-    dataset, manifest = dataset_snapshot()
+    args = parse_args()
+    dataset, manifest = dataset_snapshot(args.dataset_dir)
     data_root = Path(os.environ.get("DATA_ROOT", ROOT / "data")).expanduser().resolve()
-    campaign = os.environ.get("CAMPAIGN", f"final-preproduction-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
+    campaign = args.campaign or f"final-preproduction-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     campaign_dir = data_root / campaign
     if campaign_dir.exists():
         raise SystemExit(f"Katalog kampanii istnieje: {campaign_dir}")
     for sub in ("runs", "cases", "logs"):
         (campaign_dir / sub).mkdir(parents=True, exist_ok=True)
 
-    verify = os.environ.get("FINAL_PREPROD_VERIFY_HASHES", os.environ.get("DATASET_VERIFY_HASHES", "1")) == "1"
-    verification = verify_closed_chunks(dataset) if verify else {"verified": False, "reason": "disabled"}
+    def handle_signal(_signum: int, _frame: Any) -> None:
+        _STOP.set()
+        terminate_all()
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
     frame_count = int(manifest.get("frame_count", 0) or 0)
+    dataset_bytes = int(manifest.get("bytes_written", 0) or 0)
     candidate_cases = cases()
+    workers = max(1, min(len(candidate_cases), args.workers))
+    print(f"[final-preproduction] {APP_VERSION}", flush=True)
+    print(f"[final-preproduction] Dataset: {dataset}", flush=True)
+    print(
+        f"[final-preproduction] Snapshot: {frame_count:,} klatek · {_human_bytes(dataset_bytes)} · "
+        f"status={manifest.get('status')}",
+        flush=True,
+    )
+    print(
+        f"[final-preproduction] Workery analizy: {workers}/{len(candidate_cases)} · "
+        f"SHA-256: {'ON' if args.verify_hashes else 'OFF'} · workery weryfikacji: {args.verify_workers}",
+        flush=True,
+    )
+
+
+    verification_progress_path = campaign_dir / "verification_progress.json"
+    last_progress_line = {"text": ""}
+
+    def verification_progress(progress: dict[str, Any]) -> None:
+        payload = dict(progress) | {"updated_utc": utc_now(), "dataset": str(dataset)}
+        atomic_json(verification_progress_path, payload)
+        phase = str(progress.get("phase", "verifying"))
+        if phase == "cache-hit":
+            text = (
+                f"[final-preproduction] SHA-256: CACHE HIT · "
+                f"{progress.get('closed_chunks', 0)} chunków · {_human_bytes(progress.get('total_bytes', 0))}"
+            )
+        else:
+            fraction = float(progress.get("fraction", 0.0) or 0.0)
+            text = (
+                f"[final-preproduction] SHA-256 {100.0*fraction:6.2f}% · "
+                f"{progress.get('completed_chunks', 0)}/{progress.get('closed_chunks', 0)} chunków · "
+                f"{_human_bytes(progress.get('bytes_read', 0))}/{_human_bytes(progress.get('total_bytes', 0))} · "
+                f"{_human_bytes(progress.get('bytes_per_second', 0))}/s · ETA {_human_duration(progress.get('eta_seconds'))}"
+            )
+        if text != last_progress_line["text"]:
+            print(text, flush=True)
+            last_progress_line["text"] = text
+
+    verification: dict[str, Any]
+    if args.verify_hashes:
+        cache_key = hashlib.sha256(str(dataset).encode("utf-8")).hexdigest()[:24]
+        cache_path = data_root / ".integrity-cache" / f"{cache_key}.json"
+        print(
+            f"[final-preproduction] Rozpoczynam weryfikację zamkniętych chunków "
+            f"({args.verify_workers} workerów; cache={'ON' if args.verify_cache else 'OFF'}).",
+            flush=True,
+        )
+        try:
+            verification = verify_dataset_chunks(
+                dataset,
+                workers=args.verify_workers,
+                progress_interval_seconds=args.progress_interval,
+                progress_callback=verification_progress,
+                stop_event=_STOP,
+                allow_incomplete_last_line=str(manifest.get("status")) == "recording",
+                cache_path=cache_path,
+                use_cache=args.verify_cache and str(manifest.get("status")) != "recording",
+            )
+        except (InterruptedError, KeyboardInterrupt):
+            result = {"status": "stopped", "stage": "dataset-verification", "ended_utc": utc_now()}
+            atomic_json(campaign_dir / "run_failed.json", result)
+            print("[final-preproduction] Weryfikacja przerwana przez operatora.", file=sys.stderr, flush=True)
+            return 130
+        except Exception as exc:
+            result = {"status": "failed", "stage": "dataset-verification", "error": f"{type(exc).__name__}: {exc}", "ended_utc": utc_now()}
+            atomic_json(campaign_dir / "run_failed.json", result)
+            print(f"[final-preproduction] Weryfikacja NIEUDANA: {result['error']}", file=sys.stderr, flush=True)
+            return 1
+        print(
+            f"[final-preproduction] Weryfikacja zakończona: {verification.get('closed_chunks', 0)} chunków · "
+            f"{_human_bytes(verification.get('bytes', 0))} · {_human_duration(verification.get('elapsed_seconds'))}"
+            + (" · wynik z cache" if verification.get("cached") else ""),
+            flush=True,
+        )
+    else:
+        verification = {"verified": False, "reason": "disabled", "workers": 0}
+        atomic_json(verification_progress_path, verification | {"updated_utc": utc_now()})
+
+    if _STOP.is_set():
+        return 130
+
     base_port = int(os.environ.get("WORKER_PORT_BASE", os.environ.get("PORT", "18087")))
-    workers = max(1, min(len(candidate_cases), int(os.environ.get("FINAL_PREPROD_WORKERS", str(min(5, max(1, (os.cpu_count() or 4)//2)))))))
     common = {
         "DATA_ROOT": str(campaign_dir), "SOURCE_TYPE": "dataset-y", "DATASET_DIR": str(dataset),
         "DATASET_START_FRAME": "0", "DATASET_MAX_FRAMES": str(frame_count), "DATASET_FOLLOW": "0",
@@ -311,11 +469,13 @@ def main() -> int:
         "STREAM_STATS_WINDOW_PAIRS": os.environ.get("STREAM_STATS_WINDOW_PAIRS", "1024"),
     }
     config = {
-        "schema": "camera-entropy-final-preproduction-config-v1", "app_version": APP_VERSION,
+        "schema": "camera-entropy-final-preproduction-config-v2", "app_version": APP_VERSION,
         "created_utc": utc_now(), "campaign": campaign, "parallel_workers": workers,
+        "verification_workers": args.verify_workers, "verification_cache": args.verify_cache,
+        "progress_interval_seconds": args.progress_interval, "status_interval_seconds": args.status_interval,
         "dataset": {"path": str(dataset), "status": manifest.get("status"), "storage_mode": manifest.get("storage_mode"),
                     "width": manifest.get("width"), "height": manifest.get("height"), "frame_count": frame_count,
-                    "bytes_written": int(manifest.get("bytes_written", 0) or 0), "snapshot_utc": utc_now()},
+                    "bytes_written": dataset_bytes, "snapshot_utc": utc_now()},
         "verification": verification, "common_environment": common, "cases": candidate_cases,
         "decision_gates": {"dataset_completion_reason": "dataset-exhausted", "targets_complete": True,
                            "hmin_per_input_bit_min": 0.98, "worst_window_hmin_per_input_bit_min": 0.98, "output_byte_hmin_min": 7.90,
@@ -324,28 +484,40 @@ def main() -> int:
     }
     atomic_json(campaign_dir / "final_preproduction_config.json", config)
 
-    def handle_signal(_signum: int, _frame: Any) -> None:
-        _STOP.set(); terminate_all()
-    signal.signal(signal.SIGINT, handle_signal); signal.signal(signal.SIGTERM, handle_signal)
-
+    print(
+        f"[final-preproduction] Start analizy: {len(candidate_cases)} wariantów, "
+        f"maksymalnie {workers} równolegle. Logi wariantów: {campaign_dir / 'logs'}",
+        flush=True,
+    )
     base_env = dict(os.environ) | common
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="preprod") as pool:
-        futures = {
+        pending = {
             pool.submit(run_case, index, case, campaign_dir, base_env, base_port + index - 1): case
             for index, case in enumerate(candidate_cases, 1)
         }
-        for future in as_completed(futures):
-            case = futures[future]
-            try:
-                result = future.result()
-                results.append(result)
-                print(f"[final-preproduction] {case['id']}: {result['status']}", flush=True)
-            except Exception as exc:
-                _STOP.set(); terminate_all()
-                print(f"[final-preproduction] {case['id']}: exception: {exc}", file=sys.stderr, flush=True)
-                results.append({"id": case["id"], "status": "failed", "error": str(exc)})
+        started_monotonic = time.monotonic()
+        while pending:
+            done, not_done = wait(set(pending), timeout=args.status_interval, return_when=FIRST_COMPLETED)
+            if not done:
+                running_ids = ", ".join(str(pending[future]["id"]) for future in not_done)
+                print(
+                    f"[final-preproduction] HEARTBEAT · zakończone {len(results)}/{len(candidate_cases)} · "
+                    f"trwają {len(not_done)} · elapsed {_human_duration(time.monotonic()-started_monotonic)} · {running_ids}",
+                    flush=True,
+                )
+                continue
+            for future in done:
+                case = pending.pop(future)
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as exc:
+                    _STOP.set(); terminate_all()
+                    print(f"[final-preproduction] {case['id']}: exception: {exc}", file=sys.stderr, flush=True)
+                    results.append({"id": case["id"], "status": "failed", "error": str(exc)})
 
+    print("[final-preproduction] Wszystkie warianty zakończone. Generuję raport zbiorczy…", flush=True)
     summary = render_report(campaign_dir, config)
     failed = (
         _STOP.is_set()
@@ -355,9 +527,10 @@ def main() -> int:
     result = {"status": "failed" if failed else "complete", "report": "final_preproduction_report.html", "ended_utc": utc_now()}
     if failed:
         atomic_json(campaign_dir / "run_failed.json", result)
+        print(f"[final-preproduction] STOP/FAIL · raport: {campaign_dir / 'final_preproduction_report.html'}", flush=True)
         return 1
     atomic_json(campaign_dir / "READY.json", result)
-    print(campaign_dir / "final_preproduction_report.html")
+    print(f"[final-preproduction] PASS · raport: {campaign_dir / 'final_preproduction_report.html'}", flush=True)
     return 0
 
 

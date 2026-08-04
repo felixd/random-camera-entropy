@@ -36,7 +36,7 @@ from frame_transport import (
     send_message,
 )
 
-APP_VERSION = "2026.08.04.camera-entropy-usb-agent.7.12.0"
+APP_VERSION = "2026.08.04.camera-entropy-usb-agent.7.13.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"

@@ -63,6 +63,13 @@ def main() -> int:
         '<h3>Wyniki, diagnostyka i kampania</h3>',
         'name="dataset_scope"',
         '<option value="all-available">Całość dostępna w chwili startu</option>',
+        'name="dataset_verify_workers"',
+        'name="dataset_verify_progress_seconds"',
+        'name="final_preprod_workers"',
+        'name="final_preprod_status_interval_seconds"',
+        'name="final_preprod_verify_cache"',
+        'class="jobs-table"',
+        'class="reports-table"',
         'name="von_neumann_passes"',
         '<option value="4">4</option>',
         'name="stream_stats_window_pairs"',
@@ -76,6 +83,8 @@ def main() -> int:
     assert 'id="contextHelp"' not in template
     assert 'name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="4" step="any"' in template
     assert 'id="assessment_level" name="assessment_level"' in template
+    assert '.table-scroll th{color:#bceeff;background:#0a1c2b;position:sticky;top:0' in template
+    assert 'top:61px' not in template
     assert '<option value="full" selected>' in template
     assert "f.valueAsNumber" in template
 

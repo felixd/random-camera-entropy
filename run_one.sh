@@ -279,6 +279,8 @@ PY
             --dataset-rate "${DATASET_RATE:-1}"
             --dataset-poll-seconds "${DATASET_POLL_SECONDS:-0.1}"
             --dataset-follow-timeout-seconds "${DATASET_FOLLOW_TIMEOUT_SECONDS:-0}"
+            --dataset-verify-workers "${DATASET_VERIFY_WORKERS:-1}"
+            --dataset-verify-progress-seconds "${DATASET_VERIFY_PROGRESS_SECONDS:-2}"
             --width "$WIDTH" --height "$HEIGHT" --strict-mode
         )
         if [[ "${DATASET_REALTIME:-0}" == 1 ]]; then source_args+=(--dataset-realtime); else source_args+=(--no-dataset-realtime); fi

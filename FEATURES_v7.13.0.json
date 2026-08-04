@@ -1,0 +1,21 @@
+{
+  "version": "2026.08.04.camera-entropy-distributed.7.13.0",
+  "features": [
+    "Parallel SHA-256 verification of closed dataset chunks with live percentage, throughput and ETA",
+    "Independent controls for final analysis workers and dataset verification workers",
+    "Reusable verification cache for unchanged stopped datasets",
+    "Shared dataset_integrity.py implementation for replay and final qualification",
+    "Non-overlapping Control Panel job/report tables with corrected sticky table headers",
+    "Final preproduction profile over all currently available dataset-y frames",
+    "Parallel read-only dataset-y jobs with independent worker ports",
+    "Seven-stage full-width Control Panel with sticky navigation and external live preview",
+    "Central profile catalog with transparent UI presets and highlighted preset fields",
+    "Mask calibration and drift logic moved to masking.py",
+    "Von Neumann extraction moved to entropy_extractors.py and supports 0..4 passes",
+    "Dependency-aware UI and server-side validation for mutually exclusive options",
+    "Standalone final_preproduction_report.html with exact parameters, charts and decision gates",
+    "Streaming aggregate and worst-window Hmin/bias/lag statistics over every accepted symbol in the dataset snapshot",
+    "Five fixed final candidates evaluated in parallel against the same complete dataset snapshot",
+    "Automatic release gates for health, source Hmin, worst-window Hmin and final SHA3 diagnostics"
+  ]
+}

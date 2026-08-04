@@ -1,7 +1,32 @@
-# Camera Entropy Distributed v7.12.0
+# Camera Entropy Distributed v7.13.0
 
 
-## Final preproduction i uporządkowany Control Panel v7.12.0
+## Weryfikacja datasetu i czytelność panelu v7.13.0
+
+- pełna weryfikacja `checksums.sha256` działa równolegle i ma osobny parametr liczby workerów;
+- terminal oraz log joba pokazują postęp w procentach, liczbę chunków, odczytane dane, prędkość i ETA;
+- wynik pełnej weryfikacji zatrzymanego datasetu może być bezpiecznie użyty ponownie z cache, jeżeli checksum manifest, rozmiary i czasy modyfikacji chunków nie zmieniły się;
+- liczba równoległych wariantów finalnego profilu jest konfigurowalna niezależnie od liczby workerów SHA-256;
+- podczas wielogodzinnej analizy wypisywany jest heartbeat z liczbą zakończonych i aktywnych wariantów;
+- tabela zadań i raportów nie ma już 61-pikselowej szczeliny pod sticky nagłówkiem; kolumny mają odrębne szerokości, nieprzezroczyste tło i poziomy scroll bez zlewania wierszy;
+- wspólna implementacja integralności datasetu znajduje się w `dataset_integrity.py` i jest używana zarówno przez `dataset-y`, jak i profil finalny.
+
+Przykład dla serwera z NVMe i wieloma rdzeniami:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+DATASET_VERIFY_HASHES=1 \
+./qualification_final_preproduction.py \
+  --workers 5 \
+  --verify-workers 8 \
+  --progress-interval 2 \
+  --status-interval 30
+```
+
+Dla pojedynczego dysku talerzowego zacznij od `--verify-workers 1` lub `2`. Liczba workerów analizy również obciąża przede wszystkim I/O, ponieważ każdy wariant czyta cały snapshot datasetu.
+
+## Final preproduction i uporządkowany Control Panel v7.13.0
 
 - nowy profil `final-preproduction` wykorzystuje snapshot wszystkich aktualnie dostępnych klatek dataset-y i równolegle porównuje pięciu finalistów;
 - rekomendowany tor: temporal XOR, 1 LSB, disjoint, k=4, pełna zamrożona maska, row-major, credit 0.5, SHA3-512 z wejściem 2048 bitów;

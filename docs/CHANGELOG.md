@@ -1,3 +1,13 @@
+## 7.13.0 — 2026-08-04
+
+- równoległa weryfikacja SHA-256 zamkniętych chunków z parametrem `--verify-workers` / `FINAL_PREPROD_VERIFY_WORKERS`;
+- natychmiastowe logi startu, cykliczny postęp procentowy, prędkość, ETA oraz heartbeat długich analiz;
+- cache pełnej weryfikacji dla niezmienionych, zatrzymanych datasetów;
+- wspólny moduł `dataset_integrity.py` używany przez final preproduction i zwykłe źródło `dataset-y`;
+- parametry liczby workerów dostępne w Control Panelu oraz CLI;
+- poprawiony układ tabel „Zadania” i „Raporty”; sticky nagłówek tabeli używa `top:0`, a kolumny nie zlewają się;
+- wersja podbita do `2026.08.04.camera-entropy-distributed.7.13.0`.
+
 ## 7.12.0 — 2026-08-04
 
 - Added the final pre-production profile using the complete current dataset snapshot.

@@ -49,7 +49,7 @@ from werkzeug.security import check_password_hash
 from spatial_docs import register_documentation_routes
 from profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.04.camera-entropy-distributed-control.7.12.0"
+APP_VERSION = "2026.08.04.camera-entropy-distributed-control.7.13.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -94,6 +94,11 @@ PARAMETER_HELP = {
     "diagnostic_vn_mib": "Rozmiar równoległego wyniku Von Neumanna. Jest diagnostyczny.",
     "validation_mib": "Limit plików walidacyjnych przed conditionerem.",
     "stream_stats_window_pairs": "Liczba par w jednym oknie statystyk streamingowych. Te statystyki obejmują cały przetworzony dataset bez zapisywania pełnego strumienia raw.",
+    "dataset_verify_workers": "Liczba równoległych odczytów SHA-256. Dla NVMe/SSD zwykle 4–16, dla pojedynczego dysku talerzowego 1–2.",
+    "dataset_verify_progress_seconds": "Interwał komunikatów postępu weryfikacji integralności datasetu.",
+    "final_preprod_workers": "Liczba równoległych wariantów ostatecznej kwalifikacji. Maksymalnie pięć.",
+    "final_preprod_status_interval_seconds": "Interwał heartbeat kampanii podczas długiego przetwarzania całego datasetu.",
+    "final_preprod_verify_cache": "Ponownie używa pełnej weryfikacji, gdy checksum manifest, rozmiary i czasy modyfikacji chunków nie zmieniły się.",
     "runs": "Liczba przebiegów używana przez profile kwalifikacyjne.",
     "first_warmup_seconds": "Warm-up pierwszego przebiegu kampanii.",
     "next_warmup_seconds": "Warm-up kolejnych przebiegów kampanii.",
@@ -484,6 +489,18 @@ class JobManager:
             env["DATASET_START_FRAME"] = str(start_frame)
             env["DATASET_MAX_FRAMES"] = str(max_frames)
             env["DATASET_VERIFY_HASHES"] = "1" if profile == "final-preproduction" or payload.get("dataset_verify_hashes", False) else "0"
+            dataset_verify_workers = self._positive_int(payload, "dataset_verify_workers", 1, 64)
+            dataset_verify_progress = self._positive_int(payload, "dataset_verify_progress_seconds", 1, 60)
+            env["DATASET_VERIFY_WORKERS"] = str(dataset_verify_workers or int(env.get("DATASET_VERIFY_WORKERS", "1")))
+            env["DATASET_VERIFY_PROGRESS_SECONDS"] = str(dataset_verify_progress or int(env.get("DATASET_VERIFY_PROGRESS_SECONDS", "2")))
+            if profile == "final-preproduction":
+                final_workers = self._positive_int(payload, "final_preprod_workers", 1, 5)
+                final_status_interval = self._positive_int(payload, "final_preprod_status_interval_seconds", 5, 600)
+                env["FINAL_PREPROD_WORKERS"] = str(final_workers or min(5, max(1, (os.cpu_count() or 4) // 2)))
+                env["FINAL_PREPROD_VERIFY_WORKERS"] = env["DATASET_VERIFY_WORKERS"]
+                env["FINAL_PREPROD_PROGRESS_INTERVAL_SECONDS"] = env["DATASET_VERIFY_PROGRESS_SECONDS"]
+                env["FINAL_PREPROD_STATUS_INTERVAL_SECONDS"] = str(final_status_interval or 30)
+                env["FINAL_PREPROD_VERIFY_CACHE"] = "1" if payload.get("final_preprod_verify_cache", True) else "0"
             env["DATASET_REALTIME"] = "1" if payload.get("dataset_realtime", False) else "0"
         else:
             if str(payload.get("dataset_scope", "output-limit")) not in {"", "output-limit"}:
@@ -701,7 +718,7 @@ class JobManager:
                 raise ValueError("Profil final-preproduction wymaga źródła dataset-y")
 
             job_id = uuid.uuid4().hex
-            worker_port_span = 16 if profile == "final-preproduction" else 1
+            worker_port_span = 5 if profile == "final-preproduction" else 1
             worker_port = self._allocate_worker_port(worker_port_span)
             env, slug, output_root = self._build_environment(payload, source, profile, job_id, worker_port)
             script = (self.settings.root / ALLOWED_PROFILES[profile]).resolve()

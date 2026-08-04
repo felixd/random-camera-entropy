@@ -23,6 +23,11 @@ PROFILE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "preset": {
             "dataset_scope": "all-available",
             "dataset_verify_hashes": True,
+            "dataset_verify_workers": 8,
+            "dataset_verify_progress_seconds": 2,
+            "final_preprod_workers": 5,
+            "final_preprod_status_interval_seconds": 30,
+            "final_preprod_verify_cache": True,
             "sample_mode": "xor",
             "lsb_bits": 1,
             "pairing_mode": "disjoint",

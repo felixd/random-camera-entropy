@@ -1,95 +1,59 @@
-Camera Entropy Distributed v7.12.0 — build verification
+Camera Entropy Distributed v7.13.0 — build verification
 Generated: 2026-08-04
 
 Integrated source
 -----------------
-Base archive: random-camera-entropy-dev(7).zip
+Base: complete v7.12.0 project tree previously generated from the user's current source.
 Result: complete project tree, not a patch and no backup-file generator.
-Version: 2026.08.04.camera-entropy-distributed.7.12.0
+Version: 2026.08.04.camera-entropy-distributed.7.13.0
 
 Implemented scope
 -----------------
-- New fixed final-preproduction profile for dataset-y.
-- Snapshot of every frame published at campaign start; every candidate consumes
-  exactly the same complete snapshot and must finish with dataset-exhausted.
-- Five fixed candidates run in parallel:
-  * XOR 1 LSB, disjoint k=4, credit 0.5, SHA3-512 input 2048 (recommended);
-  * XOR 1 LSB, disjoint k=4, credit 0.5, SHA3-512 input 1024;
-  * XOR 1 LSB, disjoint k=2, credit 0.5, SHA3-512 input 1024;
-  * XOR 2 LSB, disjoint k=4, credit 1.0, SHA3-512 input 1024;
-  * Direct Y 1 LSB control.
-- SHA-256 verification of every closed dataset chunk before campaign start.
-- Whole-dataset streaming symbol statistics over every accepted production
-  symbol, with aggregate and consecutive-window Hmin, bias and lag metrics.
-- Bounded 64 MiB validation/output files remain independent of whole-dataset
-  statistics, avoiding another unbounded extracted-data copy.
-- Automatic release gates include full dataset exhaustion, completion of output
-  targets, health tests, aggregate and worst-window source Hmin, SHA3 output
-  Hmin/bias/lag and chi-square p-value.
-- One standalone final_preproduction_report.html with embedded Plotly, exact
-  parameters, tables, charts, complete JSON and automatic verdict.
-- Read-only dataset-y jobs may run in parallel on independent worker ports;
-  live camera sources remain exclusive.
-- Full-width seven-stage Control Panel with sticky navigation and an external
-  live-preview button; no embedded preview iframe.
-- Profile presets set and highlight visible options. Incompatible or irrelevant
-  controls are disabled in the browser and validated again in the API.
-- Logical code split:
-  profile_catalog.py, masking.py, entropy_extractors.py, stream_statistics.py,
-  qualification_final_preproduction.py.
-- Von Neumann extraction supports 0..4 consecutive passes with retention
-  metrics for every pass. It remains disabled in the recommended candidate.
-- LSB width remains limited to 1..4.
-- ChaCha20 is deliberately not exposed as a hash-conditioner replacement;
-  using it safely would require a separate DRBG key/reseed/lifecycle design.
+- Shared dataset_integrity.py module for checksum parsing, path validation,
+  parallel SHA-256 verification, progress snapshots and verification cache.
+- qualification_final_preproduction.py now prints immediate startup information.
+- SHA-256 progress includes percentage, completed/total chunks, bytes read,
+  average throughput and ETA; verification_progress.json is updated atomically.
+- Parallel checksum workers are configurable through:
+    CLI: --verify-workers 1..64
+    env: FINAL_PREPROD_VERIFY_WORKERS / DATASET_VERIFY_WORKERS
+    WWW: Workery weryfikacji SHA-256
+- Final candidate concurrency is configurable through:
+    CLI: --workers 1..5
+    env: FINAL_PREPROD_WORKERS
+    WWW: Równoległe warianty testu
+- Long analyses emit configurable heartbeat messages.
+- An unchanged stopped dataset may reuse a completed verification cache. Use
+  --no-verify-cache / FINAL_PREPROD_VERIFY_CACHE=0 for a fresh physical read.
+- Generic dataset-y replay also uses the shared parallel verifier and logs
+  verification progress.
+- Control Panel job/report tables use sticky top:0 headers, opaque row/header
+  backgrounds, explicit column sizing and horizontal scrolling. The previous
+  61 px gap that exposed table rows above the headings is removed.
+- Control Panel exposes verification workers, progress interval, analysis
+  workers, heartbeat interval and verification cache for the final profile.
+- Version bumped to 7.13.0 across project executables and report generators.
 
-Static verification performed
------------------------------
+Validation
+----------
 PASS: python3 -m compileall -q .
-PASS: python3 -m py_compile control_selftest.py
-PASS: bash -n for every top-level *.sh
-PASS: python3 -m json.tool for every top-level *.json
-PASS: Jinja rendering of templates/control.html with dataset-y and live sources
-PASS: no iframe in the rendered Control Panel
-PASS: JavaScript syntax check of the rendered Control Panel with Node.js
-PASS: git diff --check
+PASS: bash -n for every *.sh file
+PASS: JSON parsing for every *.json file
+PASS: rendered Jinja Control Panel template
+PASS: node --check for rendered Control Panel JavaScript
+PASS: 26/26 selftest*.py scripts, including:
+  - parallel dataset checksum verification and cache invalidation;
+  - Y8 and packed-LSB dataset replay;
+  - final preproduction report and decision gate;
+  - final preproduction Control Panel/environment worker parameters;
+  - parallel dataset-y jobs and worker port allocation;
+  - symbol-domain RCT/APT, LSB campaigns, spatial sampling, streaming stats,
+    TLS reconnect and transport lifecycle.
 
-Self-tests passed (24/24 discovered selftest*.py)
-------------------------------------------------
-- selftest.py
-- selftest_binary_geometry.py
-- selftest_binary_geometry_2d.py
-- selftest_buffered_dataset.py
-- selftest_cli_lsb_validation.py
-- selftest_control_spatial.py
-- selftest_entropy_bitplanes.py
-- selftest_entropy_extractors.py
-- selftest_failed_run_report.py
-- selftest_final_preproduction.py
-- selftest_live_byte_diagnostics.py
-- selftest_lsb_bitplane_analysis.py
-- selftest_lsb_campaign_summary.py
-- selftest_parallel_dataset_jobs.py
-- selftest_production_assessment.py
-- selftest_profile_campaigns.py
-- selftest_report_units.py
-- selftest_spatial_sampling.py
-- selftest_stream_statistics.py
-- selftest_symbol_health.py
-- selftest_temporal_sha3.py
-- selftest_tls_reconnect.py
-- selftest_transport_lifecycle.py
-- selftest_worker_state_header.py
-
-Not executed in this build container
-------------------------------------
-- control_selftest.py runtime: Flask/Werkzeug are not installed in the build
-  container. The file compiles successfully. JobManager environment logic,
-  dataset preflight, UI structure and two simultaneous dataset-y jobs are
-  covered by independent self-tests that do not require a WSGI stack. Run the
-  full control_selftest.py inside the project virtual environment after
-  installing requirements.txt.
-- The final campaign was not executed against the user's physical camera or
-  the complete >100 GB dataset in this build environment. Synthetic end-to-end
-  campaign/report generation and all decision-gate paths were tested. The real
-  final decision must be based on the generated final_preproduction_report.html.
+Limitations of build environment
+--------------------------------
+- No physical camera, mTLS agent or the user's 200+ GB dataset was available.
+- Parallel I/O speed depends on storage. NVMe commonly benefits from 4–16 hash
+  workers; a single rotational disk may be faster with 1–2.
+- The five final candidates each read the full dataset. More analysis workers
+  increase CPU use but also multiply storage bandwidth demand.

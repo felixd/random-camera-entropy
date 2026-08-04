@@ -135,5 +135,5 @@ def main()->int:
                 assert payload['enabled'] is True
             else:
                 assert payload['state']=='STARTING'
-    print('camera-entropy distributed v7.12.0 self-test: PASS');return 0
+    print('camera-entropy distributed v7.13.0 self-test: PASS');return 0
 if __name__=='__main__':raise SystemExit(main())

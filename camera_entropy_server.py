@@ -71,7 +71,7 @@ from masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelMonitor
 from entropy_extractors import repeated_von_neumann, von_neumann_split
 from stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.04.camera-entropy-distributed.7.12.0"
+APP_VERSION = "2026.08.04.camera-entropy-distributed.7.13.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -4357,6 +4357,18 @@ def parse_args() -> argparse.Namespace:
         help="Verify SHA-256 of chunks already closed by the dataset recorder",
     )
     parser.add_argument(
+        "--dataset-verify-workers",
+        type=int,
+        default=1,
+        help="Parallel SHA-256 workers for dataset verification (1..64)",
+    )
+    parser.add_argument(
+        "--dataset-verify-progress-seconds",
+        type=float,
+        default=2.0,
+        help="Dataset SHA-256 progress log interval",
+    )
+    parser.add_argument(
         "--dataset-follow",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -4714,6 +4726,10 @@ def parse_args() -> argparse.Namespace:
             parser.error("dataset-rate must be positive")
         if args.dataset_poll_seconds <= 0:
             parser.error("dataset-poll-seconds must be positive")
+        if not 1 <= args.dataset_verify_workers <= 64:
+            parser.error("dataset-verify-workers must be in 1..64")
+        if args.dataset_verify_progress_seconds <= 0:
+            parser.error("dataset-verify-progress-seconds must be positive")
         if args.dataset_follow_timeout_seconds < 0:
             parser.error("dataset-follow-timeout-seconds cannot be negative")
     if args.source_type == "dataset-y":

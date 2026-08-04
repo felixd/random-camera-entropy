@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import logging
 import time
@@ -14,6 +13,7 @@ from typing import Any, BinaryIO, Optional, TextIO
 import numpy as np
 
 from frame_sources import FrameSource, SourceFrame
+from dataset_integrity import verify_dataset_chunks
 
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 SUPPORTED_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -58,6 +58,8 @@ class DatasetYSource(FrameSource):
         self.realtime = bool(getattr(args, "dataset_realtime", False))
         self.rate = float(getattr(args, "dataset_rate", 1.0))
         self.verify_hashes = bool(getattr(args, "dataset_verify_hashes", False))
+        self.verify_workers = int(getattr(args, "dataset_verify_workers", 1))
+        self.verify_progress_seconds = float(getattr(args, "dataset_verify_progress_seconds", 2.0))
         self.follow = bool(getattr(args, "dataset_follow", True))
         self.poll_seconds = float(getattr(args, "dataset_poll_seconds", 0.10))
         self.follow_timeout_seconds = float(
@@ -112,39 +114,37 @@ class DatasetYSource(FrameSource):
             )
 
     def _verify_chunks(self) -> None:
-        checksum_file = self.dataset_dir / "checksums.sha256"
-        if not checksum_file.is_file():
-            raise RuntimeError("dataset hash verification requested but checksums.sha256 is missing")
-        raw_text = checksum_file.read_text(encoding="utf-8")
-        # A writer appends checksums only after closing a chunk. Ignore a possible
-        # last unterminated line observed during the append syscall.
-        lines = raw_text.splitlines(keepends=True)
-        for line_no, raw in enumerate(lines, 1):
-            if not raw.endswith("\n") and self._can_grow():
-                self.logger.debug("ignoring in-flight checksum line %d", line_no)
-                continue
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                expected, relative = raw.split(None, 1)
-            except ValueError as exc:
-                raise RuntimeError(f"invalid checksums.sha256 line {line_no}") from exc
-            relative = relative.lstrip("* ")
-            path = (self.dataset_dir / relative).resolve()
-            try:
-                path.relative_to(self.dataset_dir)
-            except ValueError as exc:
-                raise RuntimeError(f"checksum path escapes dataset: {relative}") from exc
-            digest = hashlib.sha256()
-            with path.open("rb") as handle:
-                for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-                    digest.update(block)
-            actual = digest.hexdigest()
-            if actual != expected:
-                raise RuntimeError(
-                    f"dataset checksum mismatch for {relative}: expected={expected}, actual={actual}"
+        def progress(item: dict[str, Any]) -> None:
+            phase = str(item.get("phase", "verifying"))
+            if phase == "cache-hit":
+                self.logger.info(
+                    "dataset SHA-256 cache hit: chunks=%s bytes=%s",
+                    item.get("closed_chunks", 0), item.get("total_bytes", 0),
                 )
+                return
+            fraction = 100.0 * float(item.get("fraction", 0.0) or 0.0)
+            self.logger.info(
+                "dataset SHA-256 %.2f%% chunks=%s/%s bytes=%s/%s rate=%.2f MiB/s eta=%s",
+                fraction,
+                item.get("completed_chunks", 0), item.get("closed_chunks", 0),
+                item.get("bytes_read", 0), item.get("total_bytes", 0),
+                float(item.get("bytes_per_second", 0.0) or 0.0) / (1024.0 * 1024.0),
+                "—" if item.get("eta_seconds") is None else f"{float(item['eta_seconds']):.1f}s",
+            )
+
+        result = verify_dataset_chunks(
+            self.dataset_dir,
+            workers=self.verify_workers,
+            progress_interval_seconds=self.verify_progress_seconds,
+            progress_callback=progress,
+            allow_incomplete_last_line=self._can_grow(),
+            use_cache=False,
+        )
+        self.logger.info(
+            "dataset SHA-256 verification complete: chunks=%s bytes=%s workers=%s elapsed=%.3fs",
+            result.get("closed_chunks", 0), result.get("bytes", 0),
+            result.get("workers", self.verify_workers), float(result.get("elapsed_seconds", 0.0) or 0.0),
+        )
 
     def open(self) -> None:
         index_path = self.dataset_dir / "frames.csv"
@@ -184,12 +184,19 @@ class DatasetYSource(FrameSource):
             raise RuntimeError("dataset-max-frames cannot be negative")
         if self.rate <= 0:
             raise RuntimeError("dataset-rate must be positive")
+        if not 1 <= self.verify_workers <= 64:
+            raise RuntimeError("dataset-verify-workers must be in 1..64")
+        if self.verify_progress_seconds <= 0:
+            raise RuntimeError("dataset-verify-progress-seconds must be positive")
         if self.poll_seconds <= 0:
             raise RuntimeError("dataset-poll-seconds must be positive")
         if self.follow_timeout_seconds < 0:
             raise RuntimeError("dataset-follow-timeout-seconds cannot be negative")
         if self.verify_hashes:
-            self.logger.info("verifying SHA-256 of currently closed dataset chunks")
+            self.logger.info(
+                "verifying SHA-256 of currently closed dataset chunks with %d worker(s)",
+                self.verify_workers,
+            )
             self._verify_chunks()
             if self._can_grow():
                 self.logger.warning(
