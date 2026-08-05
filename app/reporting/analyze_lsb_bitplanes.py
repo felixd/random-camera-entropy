@@ -21,7 +21,7 @@ import numpy as np
 
 from app.reporting.report_ui import chart_div, esc, fmt, html_page, metric_card, metrics_grid, table_html
 
-APP_VERSION = "2026.08.05.camera-entropy-lsb-analysis.8.0.3"
+APP_VERSION = "2026.08.05.camera-entropy-lsb-analysis.8.0.4"
 BIT_ORDER = "pixel-major-lsb-first"
 
 

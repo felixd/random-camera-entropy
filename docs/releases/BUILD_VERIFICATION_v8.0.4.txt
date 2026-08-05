@@ -1,0 +1,19 @@
+Camera Entropy Distributed 8.0.4 — build verification
+Date: 2026-08-05
+
+PASS: Python compileall for app/ and tests/
+PASS: Bash syntax for scripts/ and agent/
+PASS: JSON validation
+PASS: 34/34 tests/selftest*.py
+PASS: agent/build.sh rejects root/sudo builds
+PASS: agent/build.sh completed as an unprivileged local user with Go 1.23.2
+PASS: Go unit tests
+PASS: go vet
+PASS: static Go build with CGO_ENABLED=0
+PASS: embedded Go agent version: 2026.08.05.camera-entropy-go-agent.8.0.4
+PASS: agent/install.sh contains no Go toolchain invocation
+PASS: prebuilt binary version is checked against VERSION before installation
+PASS: copied and installed binary versions are checked before systemd startup
+
+NOT RUN: tests/control_selftest.py because it requires the live control-plane environment.
+NOT RUN: privileged systemd/udev installation and physical V4L2/mTLS integration against the user's camera host.

@@ -74,7 +74,7 @@ from app.core.masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelM
 from app.core.entropy_extractors import repeated_von_neumann, von_neumann_split
 from app.core.stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.3"
+APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.4"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"

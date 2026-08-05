@@ -1,5 +1,13 @@
 # Changelog
 
+## 8.0.4 — 2026-08-05
+
+- rozdzielono kompilację Go od instalacji systemowej: `agent/build.sh` działa jako lokalny użytkownik, a `agent/install.sh` wyłącznie instaluje gotowe binarium;
+- instalator nie wymaga `go` w środowisku `sudo` i nie modyfikuje drzewa źródłowego;
+- dodano sprawdzanie zgodności wersji binarium z plikiem `VERSION` przed instalacją i po skopiowaniu;
+- instalacja binarium do `/usr/local/bin` odbywa się przez plik tymczasowy i atomowe `mv`;
+- dodano test regresyjny granicy uprawnień build/install.
+
 ## 8.0.3 — 2026-08-05
 
 - naprawiono interoperacyjność agent Go → worker Python: kontrolki V4L2 są przesyłane jako kanoniczne liczby ze schematem `integer-v1`;

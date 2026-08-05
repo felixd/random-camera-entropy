@@ -1,6 +1,6 @@
-# Camera Entropy Distributed 8.0.3
+# Camera Entropy Distributed 8.0.4
 
-System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.3 ujednolica numeryczny format kontrolek V4L2 pomiędzy agentem Go i workerem Python, zachowuje zgodność ze starszymi agentami oraz zabezpiecza instalację przed przypadkowym uruchomieniem starego binarium.
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.4 rozdziela lokalną kompilację agenta Go od instalacji systemowej: `build.sh` działa jako zwykły użytkownik, a `install.sh` uruchamiany przez `sudo` instaluje i weryfikuje wyłącznie gotowe binarium.
 
 > To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 
@@ -164,20 +164,22 @@ Kontrolowana lokalna budowa trafia wyłącznie do `agent/bin/`:
 ./agent/bin/camera-entropy-agent --version
 ```
 
-Nie uruchamiaj binarium pozostawionego historycznie w `agent/cmd/camera-entropy-agent/`. Instalator 8.0.3 usuwa takie stare pliki i po instalacji porównuje wersję zbudowaną z wersją w `/usr/local/bin/camera-entropy-agent`.
+Nie uruchamiaj binarium pozostawionego historycznie w `agent/cmd/camera-entropy-agent/`. `build.sh` usuwa stare lokalne pliki, buduje nowy agent do `agent/bin/` i sprawdza wersję względem pliku `VERSION`.
 
 ### Instalacja agenta
 
-Wymagany jest Go 1.22 lub nowszy oraz pliki `pki/ca.crt`, `pki/agent.crt`, `pki/agent.key`.
+Go 1.22 lub nowszy musi być dostępny w `PATH` lokalnego użytkownika. Kompilacji nie uruchamiaj przez `sudo`. Instalacja wymaga plików `pki/ca.crt`, `pki/agent.crt`, `pki/agent.key`.
 
 ```bash
+./agent/build.sh
 sudo ./agent/install.sh
 ```
 
 Instalator:
 
+- wymaga gotowego `agent/bin/camera-entropy-agent` i nie uruchamia poleceń Go;
+- porównuje wersję gotowego binarium z plikiem `VERSION`;
 - instaluje `v4l-utils`, jeżeli go brakuje;
-- buduje i testuje statyczny binarny agent;
 - tworzy użytkownika systemowego `cameraentropy`;
 - dodaje go do grupy `video`;
 - opcjonalnie instaluje regułę udev `GROUP=video, MODE=0660`;

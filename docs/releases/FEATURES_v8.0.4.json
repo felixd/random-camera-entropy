@@ -1,0 +1,11 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.8.0.4",
+  "release": "8.0.4",
+  "changes": [
+    "Go agent compilation runs only from agent/build.sh as the local non-root user",
+    "agent/install.sh installs a prebuilt binary and has no Go toolchain dependency",
+    "prebuilt and installed agent versions are checked against the project VERSION file",
+    "atomic installation into /usr/local/bin/camera-entropy-agent",
+    "regression test for the build/install privilege boundary"
+  ]
+}
