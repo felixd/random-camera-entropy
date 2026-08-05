@@ -5,7 +5,7 @@ Ten katalog jest domyślną lokalizacją certyfikatów i kluczy używanych przez
 Utwórz je z katalogu projektu:
 
 ```bash
-./generate_mtls_pki.sh
+./scripts/admin/generate_mtls_pki.sh
 ```
 
 Domyślne dane certyfikatu agenta:

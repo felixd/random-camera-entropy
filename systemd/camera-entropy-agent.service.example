@@ -1,0 +1,30 @@
+[Unit]
+Description=Camera Entropy Go Y8 capture agent
+After=network-online.target systemd-udev-settle.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cameraentropy
+Group=cameraentropy
+SupplementaryGroups=video
+ExecStart=/usr/local/bin/camera-entropy-agent --config /etc/camera-entropy/camera-agent.env
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/camera-entropy
+DevicePolicy=closed
+DeviceAllow=/dev/video0 rw
+DeviceAllow=/dev/video1 rw
+DeviceAllow=/dev/video2 rw
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+Camera Entropy Distributed 8.0.0 — build verification
+Date: 2026-08-05
+
+PASS  Python compileall for app/ and tests/
+PASS  Bash syntax for every *.sh in scripts/ and agent/
+PASS  JSON parsing for project JSON files
+PASS  Control-panel JavaScript syntax (node --check after Jinja placeholder substitution)
+PASS  Jinja parsing of control.html through selftest_control_spatial.py
+PASS  30/30 tests/selftest*.py
+PASS  Go unit tests: go test ./...
+PASS  Go static analysis: go vet ./...
+PASS  Static Go agent build with CGO_ENABLED=0
+PASS  Parallel-job regression: multiple dataset-y + one LIVE; second LIVE rejected
+PASS  UI regression: floating log modal present; inline log panel and per-row preview removed
+PASS  Project-layout regression: Python under app/, launchers under scripts/, Go agent under agent/
+
+NOT RUN  tests/control_selftest.py with the real Flask/Werkzeug test client because
+         Flask/Werkzeug were unavailable in the build container. Control-plane
+         JobManager, environment validation, profile catalog, template parsing,
+         concurrency and log-modal behavior are covered by isolated self-tests.
+
+NOT RUN  Hardware integration against a physical V4L2 camera and production PKI.
+         agent/install.sh performs the actual /dev/video0..2 probe as the service
+         user during deployment and aborts unless ALLOW_NO_CAMERA=1 is explicit.

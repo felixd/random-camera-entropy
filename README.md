@@ -1,892 +1,348 @@
-# Camera Entropy Distributed v7.14.1
+# Camera Entropy Distributed 8.0.0
 
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.0 porządkuje projekt w moduły, zastępuje Pythonowego agenta kamery agentem Go i pozwala uruchamiać wiele niezależnych zadań `dataset-y` równolegle.
 
-## Produkcyjna spójność maski i raportów v7.14.1
+> To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 
-- nowy profil i skrypt `run_production.sh`: `PRODUCTION FINAL — XOR 1 LSB / SHA3-512`;
-- pełna maska jest jednoznacznym ustawieniem domyślnym, a historyczne `spatial_sampling` działa wyłącznie z `spatial_mask_pattern=legacy`;
-- manifesty, API i raporty pokazują efektywną selekcję przestrzenną zamiast nieaktywnej wartości legacy;
-- opis pipeline'u uwzględnia rzeczywistą liczbę przejść Von Neumanna i nie pokazuje VN, gdy etap jest wyłączony;
-- profil produkcyjny wyłącza pliki walidacyjne, VN, podglądy, heatmapy, Dual Weave i pozostałą kosztowną diagnostykę.
+## Zatwierdzony profil produkcyjny
 
-## Weryfikacja datasetu i czytelność panelu v7.13.0
-
-- pełna weryfikacja `checksums.sha256` działa równolegle i ma osobny parametr liczby workerów;
-- terminal oraz log joba pokazują postęp w procentach, liczbę chunków, odczytane dane, prędkość i ETA;
-- wynik pełnej weryfikacji zatrzymanego datasetu może być bezpiecznie użyty ponownie z cache, jeżeli checksum manifest, rozmiary i czasy modyfikacji chunków nie zmieniły się;
-- liczba równoległych wariantów finalnego profilu jest konfigurowalna niezależnie od liczby workerów SHA-256;
-- podczas wielogodzinnej analizy wypisywany jest heartbeat z liczbą zakończonych i aktywnych wariantów;
-- tabela zadań i raportów nie ma już 61-pikselowej szczeliny pod sticky nagłówkiem; kolumny mają odrębne szerokości, nieprzezroczyste tło i poziomy scroll bez zlewania wierszy;
-- wspólna implementacja integralności datasetu znajduje się w `dataset_integrity.py` i jest używana zarówno przez `dataset-y`, jak i profil finalny.
-
-Przykład dla serwera z NVMe i wieloma rdzeniami:
-
-```bash
-SOURCE_TYPE=dataset-y \
-DATASET_DIR=data/frame-buffer-latest \
-DATASET_VERIFY_HASHES=1 \
-./qualification_final_preproduction.py \
-  --workers 5 \
-  --verify-workers 8 \
-  --progress-interval 2 \
-  --status-interval 30
-```
-
-Dla pojedynczego dysku talerzowego zacznij od `--verify-workers 1` lub `2`. Liczba workerów analizy również obciąża przede wszystkim I/O, ponieważ każdy wariant czyta cały snapshot datasetu.
-
-## Final preproduction i uporządkowany Control Panel v7.13.0
-
-- nowy profil `final-preproduction` wykorzystuje snapshot wszystkich aktualnie dostępnych klatek dataset-y i równolegle porównuje pięciu finalistów;
-- rekomendowany tor: temporal XOR, 1 LSB, disjoint, k=4, pełna zamrożona maska, row-major, credit 0.5, SHA3-512 z wejściem 2048 bitów;
-- wariant 1024-bitowy, lag k=2, XOR 2 LSB oraz Direct LSB są wykonywane jako kontrolowane challengery;
-- Control Panel ma pełnoszeroką, siedmioetapową konfigurację pipeline, sticky menu i osobny przycisk podglądu zamiast osadzonego iframe;
-- wiele zadań `dataset-y` może działać równolegle na osobnych portach, źródła LIVE pozostają wyłączne;
-- logika masek została wydzielona do `masking.py`, a ekstraktory do `entropy_extractors.py`;
-- Von Neumann może być wykonany 0–4 razy, z metrykami retencji każdego przejścia;
-- opcje wykluczające się są blokowane w UI i ponownie walidowane w API;
-- pełnodatasetowe statystyki Hmin, biasu, lag-1 i zależności bitplane są liczone strumieniowo dla wszystkich zaakceptowanych symboli, niezależnie od ograniczonego rozmiaru plików walidacyjnych;
-- finalny raport używa bramki dla wyniku zagregowanego i najgorszego kolejnego okna datasetu.
-
-Uruchomienie finalnego testu z terminala:
-
-```bash
-SOURCE_TYPE=dataset-y \
-DATASET_DIR=data/frame-buffer-latest \
-DATASET_VERIFY_HASHES=1 \
-./qualification_final_preproduction.py
-```
-
-Wynikiem jest jeden samodzielny plik:
+Domyślny profil `production-final` wykorzystuje:
 
 ```text
-data/final-preproduction-*/final_preproduction_report.html
+Y8 → temporal XOR → 1 LSB → pełna zamrożona maska
+   → RCT/APT + clipping/shadow fail-closed
+   → 2048 bitów wejścia → SHA3-512 → 512 bitów outputu
 ```
 
-## Kompleksowa kwalifikacja produkcyjna v7.11.0
+Najważniejsze parametry:
 
-- Wszystkie aktywne tory obsługują maksymalnie `1..4` dolne bity kanału Y. Profile `full8` zostały usunięte z kampanii i walidacji CLI.
-- Kampania LSB porównuje pełną macierz `xor/direct/delta × 1..4`, czyli 12 przebiegów.
-- Raporty porównawcze pokazują dane tabelaryczne także na wykresach. Przepustowość jest przechowywana w `bit/s`, a w HTML można ją przełączać pomiędzy `bit/s`, `kbit/s`, `kB/s`, `MiB/s` i `MB/s`; domyślne jest `kB/s`.
-- Dodano profil WWW **PRODUCTION — kompleksowa macierz decyzyjna** oraz skrypt `qualification_production_assessment.py`.
-- Profil testuje w jednej, faktoryzowanej kampanii: wszystkie tryby i szerokości LSB, pairing i lagi, publiczne maski/serializacje, rozmiary wejścia SHA3-512, wszystkie warianty dual weave oraz powtarzalność kandydatów.
-- Wyniki są składane w jeden samodzielny plik `production_assessment_report.html`. Zawiera on osadzony runtime Plotly, pełny JSON, dokładne parametry każdego przebiegu, wykresy, tabele i linki diagnostyczne. Ten jeden plik można przesłać do końcowej oceny.
-- Dostępne poziomy: `quick`, `full` (domyślny) oraz `exhaustive`. Zmienne numeryczne są testowane metodą faktoryzowaną; raport jawnie opisuje pokrycie i nie udaje nieskończonego iloczynu wszystkich wartości ciągłych.
+```text
+SAMPLE_MODE=xor
+LSB_BITS=1
+PAIRING_MODE=disjoint
+PAIR_LAG_FRAMES=4
+SPATIAL_MASK_PATTERN=full
+SERIALIZATION_ORDER=row-major
+ENTROPY_CREDIT_BITS_PER_PIXEL=0.5
+VON_NEUMANN_PASSES=0
+CONDITIONER=sha3-512
+CONDITIONER_INPUT_BITS=2048
+```
 
-Uruchomienie na najnowszym datasecie:
+Uruchomienie:
+
+```bash
+./scripts/run/run_production.sh
+```
+
+Dla zatrzymanego datasetu:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+DATASET_VERIFY_HASHES=1 \
+./scripts/run/run_production.sh
+```
+
+## Układ projektu
+
+```text
+agent/                          agent Go przy kamerze
+  cmd/camera-entropy-agent/     kod agenta i testy
+  config/                       przykładowa konfiguracja
+  install.sh                    budowa, probe i instalacja systemd
+
+app/
+  control/                      control server, job manager, profile
+  core/                         pipeline, maska, ekstrakcja, health tests
+  qualification/                kampanie kwalifikacyjne
+  reporting/                    analizy i generatory raportów
+  sources/                      V4L2, TLS-Y, RTSP, dataset-y, recorder
+  tools/                        narzędzia pomocnicze
+  web/                          szablony oraz statyczne zasoby WWW
+
+scripts/
+  run/                          zwykłe uruchomienia i produkcja
+  qualification/                kwalifikacje i macierze testów
+  smoke/                        krótkie testy diagnostyczne
+  admin/                        PKI, hasła, tokeny, uprawnienia
+
+tests/                          self-testy
+config/                         konfiguracje i baseline'y
+deploy/                         przykłady reverse proxy
+systemd/                        unity systemd
+docs/                           dokumentacja techniczna i historia wydań
+```
+
+Kod aplikacji należy uruchamiać jako moduły `app.*` albo przez skrypty z `scripts/`. Nie należy przywracać plików Python do katalogu głównego.
+
+## Wymagania głównej aplikacji
+
+- Linux;
+- Python 3.11 lub nowszy;
+- `python3-venv`, `curl`, `flock`, `sha256sum`;
+- `v4l-utils` dla lokalnego V4L2;
+- `ffmpeg` i `ffprobe` dla RTSP;
+- zależności z `requirements.txt`.
+
+Skrypty automatycznie tworzą `.venv` i instalują zależności przy pierwszym uruchomieniu.
+
+## Panel kontrolny
+
+```bash
+MAX_DATASET_JOBS=12 ./scripts/run/start_control_server.sh
+```
+
+Domyślny adres:
+
+```text
+http://127.0.0.1:8087/
+```
+
+Parametr równoległości można też podać bezpośrednio:
+
+```bash
+.venv/bin/python -m app.control.control_server --max-dataset-jobs 12
+```
+
+Zasady współbieżności:
+
+- wiele zadań `dataset-y` może pracować równolegle;
+- zadania `dataset-y` mogą działać jednocześnie z jednym zadaniem LIVE;
+- tylko drugie równoległe zadanie LIVE jest blokowane, ponieważ kamera ma jednego konsumenta;
+- każdy job otrzymuje własny port workera;
+- `final-preproduction` rezerwuje pięć kolejnych portów dla swoich wariantów;
+- limit `MAX_DATASET_JOBS` dotyczy jobów uruchamianych z panelu, nie wewnętrznych procesów pojedynczej kampanii.
+
+Przycisk `Log` przy zadaniu otwiera pływające okno. Okno obsługuje automatyczne przewijanie, pauzę, zmianę zadania, czyszczenie widoku oraz zamknięcie przez `Esc` lub kliknięcie w tło. Log nie zajmuje już miejsca pod tabelą zadań.
+
+Konfiguracja Nginx znajduje się w:
+
+```text
+deploy/nginx/nginx-camera-entropy.conf.example
+```
+
+## Agent kamery Go
+
+Agent stale otwiera i opróżnia niekompresowany strumień YUYV. Z każdej klatki wyciąga pełną płaszczyznę Y8 i udostępnia ją przez istniejący protokół `CEYTLS01` z mTLS. Gdy klient nie jest podłączony, agent nie archiwizuje klatek — utrzymuje kamerę rozgrzaną i odrzuca payload.
+
+### Automatyczny wybór urządzenia
+
+Domyślnie agent kolejno sprawdza:
+
+```text
+/dev/video0
+/dev/video1
+/dev/video2
+```
+
+Dla każdego kandydata sprawdza:
+
+1. istnienie urządzenia;
+2. dostęp do odczytu i zapisu;
+3. możliwość ustawienia ekspozycji;
+4. możliwość ustawienia YUYV i żądanej geometrii;
+5. faktyczne pobranie pełnych klatek testowych.
+
+Pierwsza kamera, która przejdzie cały probe, zostaje użyta. Wymuszenie konkretnej kamery:
+
+```text
+DEVICE=/dev/video1
+```
+
+Sam test bez uruchamiania usługi:
+
+```bash
+cd agent
+go run ./cmd/camera-entropy-agent --probe
+```
+
+### Instalacja agenta
+
+Wymagany jest Go 1.22 lub nowszy oraz pliki `pki/ca.crt`, `pki/agent.crt`, `pki/agent.key`.
+
+```bash
+sudo ./agent/install.sh
+```
+
+Instalator:
+
+- instaluje `v4l-utils`, jeżeli go brakuje;
+- buduje i testuje statyczny binarny agent;
+- tworzy użytkownika systemowego `cameraentropy`;
+- dodaje go do grupy `video`;
+- opcjonalnie instaluje regułę udev `GROUP=video, MODE=0660`;
+- kopiuje konfigurację i certyfikaty;
+- wykonuje probe `/dev/video0..2` jako użytkownik usługi;
+- instaluje i uruchamia `camera-entropy-agent.service`.
+
+Logi:
+
+```bash
+journalctl -u camera-entropy-agent -f
+```
+
+Gdy kamera nie przechodzi probe, instalator pokazuje uprawnienia urządzeń i grupy użytkownika. Typowa ręczna naprawa dla zwykłego użytkownika:
+
+```bash
+sudo usermod -aG video "$USER"
+# wyloguj się i zaloguj ponownie
+```
+
+W środowisku bez podłączonej kamery można zainstalować usługę bez udanego probe:
+
+```bash
+sudo ALLOW_NO_CAMERA=1 ./agent/install.sh
+```
+
+Konfiguracja agenta po instalacji:
+
+```text
+/etc/camera-entropy/camera-agent.env
+```
+
+## Rejestrator Y8/LSB
+
+Pełny Y8, limit 300 GB:
+
+```bash
+SOURCE_TYPE=tls-y \
+TLS_HOST=192.168.1.2 \
+FRAME_STORAGE_MODE=y8 \
+FRAME_BUFFER_LIMIT_BYTES=300000000000 \
+./scripts/run/run_frame_buffer.sh
+```
+
+Pakowane LSB całej klatki:
+
+```bash
+SOURCE_TYPE=tls-y \
+FRAME_STORAGE_MODE=lsb-packed \
+FRAME_BUFFER_LIMIT_BYTES=300000000000 \
+./scripts/run/run_frame_buffer.sh
+```
+
+Domyślny wskaźnik:
+
+```text
+data/frame-buffer-latest
+```
+
+Dataset może być czytany podczas zapisu. Wpis w `frames.csv` jest znacznikiem zatwierdzenia pełnej klatki.
+
+Szczegóły: [docs/BUFFERED_DATASETS.md](docs/BUFFERED_DATASETS.md).
+
+## Zwykłe przebiegi
+
+Pojedynczy przebieg:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+./scripts/run/run_one.sh
+```
+
+Finalna kwalifikacja całego snapshotu:
+
+```bash
+SOURCE_TYPE=dataset-y \
+DATASET_DIR=data/frame-buffer-latest \
+DATASET_VERIFY_HASHES=1 \
+./scripts/qualification/final_preproduction.sh \
+  --workers 5 \
+  --verify-workers 8
+```
+
+Kompleksowa macierz produkcyjna:
 
 ```bash
 SOURCE_TYPE=dataset-y \
 DATASET_DIR=data/frame-buffer-latest \
 ASSESSMENT_LEVEL=full \
-./qualification_production_assessment.py
+./scripts/qualification/production_assessment.sh
 ```
 
-Gotowy plik znajduje się w:
+Pozostałe profile znajdują się w `scripts/qualification/` i `scripts/smoke/`.
+
+## Cache integralności datasetu
+
+Dla zatrzymanego, niezmienionego datasetu wynik pełnej weryfikacji SHA-256 jest przechowywany w:
 
 ```text
-data/production-assessment-*/production_assessment_report.html
+data/.integrity-cache/
 ```
 
-## Poprawki kampanii wielobitowego LSB v7.11.1-rev2
-
-- RCT i APT są wykonywane na oryginalnych symbolach źródłowych, a nie na sztucznie serializowanym strumieniu bitplane.
-- APT używa okna 1024 próbek dla źródła binarnego oraz 512 próbek dla źródeł wielosymbolowych, zgodnie z SP 800-90B.
-- Nieudany przebieg zachowuje dane częściowe i generuje `run_report.html`, analizy BIN oraz bezpośrednie odsyłacze do przyczyny i logu.
-- Raport kampanii porównuje przepustowości lifetime, pokazuje podstawę pomiaru oraz relację `SHA3 / credited entropy`.
-- Kampania LSB domyślnie wyłącza kosztowne obrazy WWW, diagnostykę live, VN i geometrię binarną; można je ponownie włączyć zmiennymi `LSB_*`.
-
-
-## Korelacja przestrzenna, maski i dokumentacja v7.9.0
-
-Wersja 7.7.0 dodaje konfigurowalne maski `full`, obie fazy checkerboard, ogólną siatkę `grid`, wybór jednej pozycji z bloku `block`, przestrzenny offset temporalnego XOR oraz kolejności `row-major`, `serpentine` i `tile-interleave`.
-
-Offset jest stosowany spójnie do temporalnego XOR, kalibracji, clippingu, shadow maski i walidacji. Krawędzie są odrzucane bez zawijania. Indeksy serializacji są cache'owane, dzięki czemu `tile-interleave` nie sortuje całej matrycy przy każdej ramce.
-
-Panel WWW zawiera dziesięć profili przestrzennych i kampanię zbiorczą. Każde pole ma pomoc kontekstową: hover lub fokus pokazuje opis bezpośrednio przy aktywnym elemencie, a kliknięcie przypina trwałe, przewijalne okno pomocy w viewport. Wszystkie pliki README, Markdown i tekstowe instrukcje są dostępne po zalogowaniu pod `/docs/`.
-
-Pełny opis parametrów i zasad interpretacji znajduje się w [SPATIAL_SAMPLING.md](SPATIAL_SAMPLING.md).
-
-
-## Odporność transportu TLS-Y v7.6.1
-
-> Uwaga historyczna: od v7.8 agent utrzymuje kamerę otwartą i stale pobiera klatki, aby zapewnić rzeczywisty warm-up. Poniższy opis dotyczy zachowania v7.6.1 i został zastąpiony przez model continuous capture opisany w `BUFFERED_DATASETS.md`.
-
-W v7.6.1 agent USB otwierał urządzenie V4L2 osobno dla każdej uwierzytelnionej sesji i zwalniał je natychmiast po jej zakończeniu. Zapobiegało to pozostawianiu niedrenowanego strumienia OpenCV/V4L2 pomiędzy kolejnymi rundami kwalifikacji.
-
-Zamykanie sesji używa komunikatów aplikacyjnych `close` / `close-ack`, dzięki czemu poprawne zakończenie workera nie kończy się oczekiwanym `Broken pipe` po stronie kamery.
-
-Dla źródła `tls-y` domyślne ustawienia to:
+Cache jest używany tylko, gdy nie zmieniły się: lista chunków, sumy oczekiwane, rozmiary, `mtime_ns`, plik `checksums.sha256` i rozwiązana ścieżka datasetu.
 
 ```bash
-SOURCE_FRAME_TIMEOUT_SECONDS=60
-SOURCE_RECONNECT_ATTEMPTS=5
-SOURCE_RECONNECT_BACKOFF_SECONDS=2
+DATASET_VERIFY_HASHES=1 \
+DATASET_VERIFY_CACHE=1 \
+DATASET_VERIFY_WORKERS=8 \
+./scripts/run/run_one.sh
 ```
 
-W kampanii `qualification_dual_weave_stagger.sh` liczba prób reconnect wynosi domyślnie 10. Reconnect przed rozpoczęciem produkcji resetuje scheduler par, warm-up i kalibrację maski. Po rozpoczęciu produkcji obowiązuje fail-closed i run musi zostać rozpoczęty od nowa.
-
-## Trwały panel WWW v7.1
-
-Od v7.1 publiczny port `8087` należy do osobnego **control servera**, który działa stale. Proces wykonujący obliczenia jest workerem uruchamianym tylko na czas testu i nasłuchuje wyłącznie na loopbackowym porcie `18087`.
-
-```text
-HTTPS / reverse proxy
-        ↓
-control_server.py — 127.0.0.1:8087 — działa stale
-        ├── uruchamianie/zatrzymywanie testów
-        ├── stan i log procesu
-        ├── proxy aktywnego panelu workera
-        ├── /data — wyniki i raporty
-        └── opcjonalny read-only share
-                         │
-                         ▼
-camera_entropy_server.py — 127.0.0.1:18087 — tylko podczas testu
-```
-
-Zakończenie testu nie wyłącza już strony WWW. Worker kończy pracę, `run_one.sh` wykonuje analizy i zapisuje `READY.json` oraz `run_report.html`, natomiast control server nadal udostępnia panel i katalog wyników.
-
-### Pierwsze uruchomienie control servera
-
-1. Skonfiguruj źródła. Plik `sources.json` jest odczytywany przy starcie aplikacji. Domyślnym pierwszym źródłem jest agent `camera` pod adresem `192.168.1.2`. Pełny wzór dla lokalnego USB, zdalnego USB/mTLS oraz RTSP znajduje się w `sources.example.json`.
+Wymuszenie świeżej weryfikacji:
 
 ```bash
-cp sources.example.json sources.json
-chmod 600 sources.json
+DATASET_VERIFY_CACHE=0 ./scripts/run/run_one.sh
 ```
 
-URL i hasło RTSP pozostają w osobnym pliku `0600`; formularz WWW wybiera tylko zdefiniowane wcześniej `source_id`. Panel nie pozwala wprowadzać dowolnego polecenia ani dowolnych zmiennych środowiskowych.
+## PKI i panel WWW
 
-2. Utwórz login, hash hasła i sekret sesji:
+Generowanie mTLS:
 
 ```bash
-OUT_DIR="$HOME/.config/camera-entropy" \
-CREDENTIALS_FILE="$HOME/.config/camera-entropy/web-user.json" \
-SECRET_FILE="$HOME/.config/camera-entropy/web-secret.key" \
-USERNAME=felixd \
-./generate_web_credentials.sh
+./scripts/admin/generate_mtls_pki.sh
 ```
 
-3. Uruchom trwały panel na domyślnym porcie:
+Generowanie konta panelu:
 
 ```bash
-WEB_CREDENTIALS_FILE="$HOME/.config/camera-entropy/web-user.json" \
-WEB_SECRET_FILE="$HOME/.config/camera-entropy/web-secret.key" \
-WEB_SOURCES_FILE="$PWD/sources.json" \
-WEB_HOST=127.0.0.1 \
-WEB_PORT=8087 \
-WORKER_PORT=18087 \
-./start_control_server.sh
+sudo ./scripts/admin/generate_web_credentials.sh
+sudo ./scripts/admin/generate_share_token.sh
 ```
 
-Za reverse proxy strona jest dostępna pod adresem skonfigurowanym w Nginx, np. `https://camera.random.flameit.io`. Przykład konfiguracji znajduje się w `nginx-camera-entropy.conf.example`.
+Opis certyfikatów: [pki/README.md](pki/README.md).
 
-### Funkcje panelu
+## Testy
 
-- uruchomienie profilu `smoke`, uproszczonego `temporal-sha3`, pojedynczego przebiegu, kwalifikacji, cold-start, checkerboard phases oraz testów `dual-weave`, w tym skupionego `dual-weave-stagger2`;
-- wybór uprzednio skonfigurowanego źródła `v4l2`, `tls-y` lub `rtsp`;
-- ustawienie ekspozycji, lagu ramek, masek przestrzennych, offsetu pikseli, serializacji, rozmiaru conditionera i limitów danych;
-- zatrzymanie całej grupy procesów testu;
-- ciągły log zadania;
-- podgląd panelu aktywnego workera przez `/live`;
-- historia zadań;
-- przeglądanie i pobieranie wyników pod `/data/`;
-- przeglądanie dokumentacji projektu pod `/docs/` oraz pomoc kontekstowa przy parametrach;
-- raport `run_report.html` generowany dla każdego ukończonego przebiegu;
-- raport kampanii `qualification_report.html` dla kwalifikacji.
-
-Źródła LIVE (`v4l2`, `tls-y`, `rtsp`) pozostają wyłączne. Zadania `dataset-y` są tylko do odczytu i mogą działać równolegle na niezależnych portach workera, do limitu `MAX_DATASET_JOBS`. Zamknięcie przeglądarki nie przerywa testu.
-
-## Uproszczony tor Temporal SHA3
-
-Profil `temporal-sha3` realizuje proponowany tor produkcyjno-eksperymentalny bez checkerboardu, dual weave i Von Neumanna:
-
-```text
-LSB(frame g) XOR LSB(frame g-k)
-        ↓
-zamrożona pełna aktywna maska
-        ↓
-RCT / APT / clipping / kontrola dryftu maski
-        ↓
-SHA3-512
-        ↓
-512 bitów na blok conditionera
-```
-
-Domyślny smoke używa bloku `65 536` surowych bitów na jeden digest SHA3-512, czyli kompresji `128:1`, zapisuje 1 MiB wyjścia SHA3 i 8 MiB strumieni walidacyjnych. Wartość jest punktem startowym do testów porównawczych, a nie formalnie zatwierdzonym współczynnikiem kredytowania entropii. Można ją zmienić polem `Conditioner input [bit]` lub zmienną `CONDITIONER_INPUT_BITS`.
+Python:
 
 ```bash
-SOURCE_TYPE=tls-y ./smoke_temporal_sha3.sh
+PYTHONPATH=. python3 -m compileall -q app tests
+for test in tests/selftest*.py; do PYTHONPATH=. python3 "$test" || exit 1; done
 ```
 
-W tym profilu `ENABLE_VON_NEUMANN=0`, więc etap VN nie jest nawet obliczany. Health tests działają na temporalnych bitach po zamrożonej masce przed SHA3-512. Powtórzenie kolejnego digestu SHA3 nadal powoduje latch fail-closed.
-
-### Obrazy diagnostyczne
-
-Generowanie klatki, kanału Y, mapy LSB i masek w panelu workera jest domyślnie wyłączone. Tak samo okresowe PNG masek. Obie funkcje można zaznaczyć przed uruchomieniem testu:
-
-- `generuj obrazy podglądu WWW workera` → `WEB_IMAGES=1`;
-- `archiwizuj okresowe PNG masek` → `MASK_SNAPSHOT_IMAGES=1`.
-
-Wyłączenie PNG masek nie wyłącza metryk dryftu, CSV, JSON ani wykresu Plotly. Dzięki temu kontrola retencji/Jaccarda nadal działa bez kosztu kodowania i przesyłania obrazów.
-
-## Raporty i diagnostyka live v7.9.0
-
-Raporty są teraz projektowane jako krótki panel decyzyjny, a nie surowy zrzut wszystkich pól. Najważniejsze metryki i werdykt znajdują się na górze, a pełne tabele pozostają w sekcjach rozwijanych.
-
-Wykresy korzystają z lokalnej kopii Plotly.js:
-
-```text
-static/vendor/plotly-3.3.1.min.js
-```
-
-Nie jest potrzebny zewnętrzny CDN. Dzięki temu wykresy działają również w raportach otwieranych przez zalogowane `/data/` oraz read-only `/share/<token>/data/...`. Gdy JavaScript jest wyłączony, wszystkie wartości nadal są dostępne w tabelach HTML, JSON i CSV.
-
-Najważniejsze raporty:
-
-- `run_report.html` — porównanie etapów RAW → VN → SHA3, health, clipping i stabilność maski;
-- `dual_weave_report.html` — przepustowość, korelacja pozycyjna C0↔C1, lagi granic bloków i porównanie `same-group` / `stagger-1` / `stagger-2`;
-- `binary_geometry_report.html` — heatmapa liczności przejść, mapa reszt Pearsona względem niezależności, histogramy marginalne, H(X), H(Y), H(X,Y), H(Y|X), MI, Cramér V oraz statyczne heatmapy 2D bez brył i chmur 3D;
-- `dual_weave_campaign_report.html` — powtarzalność wariantów w kampanii i diagnostyczny ranking;
-- `qualification_report.html` — powtarzalność przebiegów, finalne SHA3, maska i pozostała korelacja przestrzenna.
-
-Katalog główny `/data/` i share read-only wyróżniają właściwy raport dla każdego przebiegu oraz pokazują krótkie podsumowanie bez wchodzenia w strukturę plików.
-
-### Diagnostyka workera na żywo
-
-Nagłówek panelu jest także skrótem bieżącego etapu. Dla `WARMING_UP` pokazuje czas pozostały względem skonfigurowanego warm-upu i pasek postępu. Dla `CALIBRATING` pokazuje numer pary kalibracyjnej względem wszystkich par oraz procent wykonania. W stanie produkcyjnym pokazuje postęp docelowego pliku SHA3 lub głównego wyjścia. Dane są pobierane z tych samych pól `/api/stats`, które zasilają karty poniżej, więc nagłówek i tabela pozostają spójne.
-
-Panel workera pobiera dane bezpośrednio z `/api/byte-diagnostics` i rysuje je lokalnym Plotly bez wpływu na kolejność ani zawartość zapisywanych strumieni. Domyślny widok pokazuje każdy etap na osobnym wykresie liniowym z własną symetryczną skalą odchylenia od `1/256`. Operator może przełączyć widok na linie nakładane ze wspólną skalą; wybór jest zapisywany w `localStorage` przeglądarki. `Direct LSB — aktywna maska` pozostaje w osobnym panelu, aby nie psuć skali etapów po czyszczeniu. Monitorowane są etapy:
-
-```text
-Direct LSB
-Temporal XOR — pełna mapa
-Temporal XOR — aktywna maska
-Von Neumann
-SHA3-512
-```
-
-W trybie dual weave pojawia się osobna siatka wykresów C0/C1 RAW, C0/C1 po Von Neumannie, rzeczywistego wejścia conditionera i SHA3-512. Liczniki bitowe są pakowane ciągle pomiędzy ramkami, bez sztucznego dopełniania każdego fragmentu do pełnego bajtu. Panel pokazuje też H, histogramową Hmin, średnią bajtu i liczbę pełnych bajtów dla każdego etapu.
-
-Histogramy live używają liniowych śladów Plotly `scatter`, czyli renderera SVG. Nie wymagają WebGL i działają z polityką CSP projektu bez dodawania `unsafe-eval`. Dotyczy to zarówno histogramów częstotliwości, jak i wykresu dryftu maski. Błąd renderowania jest przechwytywany i pokazywany wewnątrz panelu zamiast pozostawienia pustego pola.
-
-Wykres dryftu maski pokazuje retencję aktywnej maski i indeks Jaccarda wraz z progami fail-closed. Dane niepoprawne, puste i niefinitywne są odrzucane przed przekazaniem ich do Plotly.
-
-Worker okresowo zapisuje wielopanelowy obraz:
-
-```text
-live_byte_heatmaps.png
-```
-
-Każdy panel to macierz przejść `B_n → B_(n+1)` znormalizowana do liczby par na milion i pokazana we wspólnej skali `log10(1+pairs_per_million)`. Normalizacja pozwala porównywać etapy o różnej przepustowości bez przyciemniania wolniejszych strumieni. Częstotliwość generowania jest ustawiana w panelu WWW albo zmienną `LIVE_HEATMAP_INTERVAL_SECONDS`. Generowanie obrazu odbywa się w osobnym wątku.
-
-Tekst w generowanych PNG jest rysowany przez Pillow i zainstalowany systemowy font TrueType, dzięki czemu zachowane są polskie znaki. Projekt domyślnie szuka DejaVu Sans, Liberation Sans lub Noto Sans. W nietypowym systemie można jawnie wskazać font bez kopiowania go do projektu:
+Agent Go:
 
 ```bash
-CAMERA_ENTROPY_FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
-CAMERA_ENTROPY_FONT_BOLD=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+cd agent
+go test ./...
+go build ./cmd/camera-entropy-agent
 ```
 
-Najważniejsze ustawienia:
-
-```text
-LIVE_BYTE_DIAGNOSTICS=1
-LIVE_HEATMAP_INTERVAL_SECONDS=60   # 0 wyłącza zapis okresowego PNG
-LIVE_HEATMAP_MAX_STAGES=8
-LIVE_HEATMAP_MIN_BYTES=4096
-```
-
-### Dostęp read-only do raportów
-
-Opcjonalny token pozwala udostępnić wyniki bez dostępu do przycisków sterujących:
+Skrypty Bash:
 
 ```bash
-OUT_FILE="$HOME/.config/camera-entropy/report-share.token" \
-./generate_share_token.sh
-
-WEB_SHARE_TOKEN_FILE="$HOME/.config/camera-entropy/report-share.token" \
-./start_control_server.sh
+find scripts agent -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 ```
 
-Po zalogowaniu panel pokazuje odnośnik w postaci:
+## Migracja z 7.x
+
+Wersja 8.0.0 zmienia ścieżki. Najważniejsze odpowiedniki:
 
 ```text
-https://camera.random.flameit.io/share/<długi-losowy-token>/
+camera_entropy_server.py          → app/core/camera_entropy_server.py
+control_server.py                 → app/control/control_server.py
+frame_sources.py                  → app/sources/frame_sources.py
+masking.py                        → app/core/masking.py
+run_one.sh                        → scripts/run/run_one.sh
+start_control_server.sh           → scripts/run/start_control_server.sh
+qualification_final_*.py          → app/qualification/ + scripts/qualification/
+usb_y_capture_agent.py            → agent/cmd/camera-entropy-agent/
+run_usb_agent.sh                  → agent/install.sh + systemd
 ```
 
-Jest to dostęp tylko do odczytu. Token należy traktować jak hasło: jest obecny w URL i może trafić do historii przeglądarki oraz logów reverse proxy. Bezpieczniejszą opcją dla stałej administracji pozostaje normalne logowanie do panelu.
+Przy wdrożeniu pełnego drzewa zachowaj istniejące `data/`, `pki/` i lokalny `sources.json`. Zaktualizuj unity systemd, ponieważ stare wpisy `ExecStart` wskazują na pliki z katalogu głównego.
 
-### Porty
-
-```text
-8087   control server — stały port panelu i /data
-18087  worker — tylko 127.0.0.1, uruchamiany na czas testu
-9443   agent USB mTLS — na hoście przy kamerze
-```
-
-Nie należy wystawiać `18087` do sieci.
-
-Rozdzielona wersja kandydata przedprodukcyjnego v6.1.3. Przechwytywanie USB może działać na małym hoście przy kamerze, natomiast kalibracja, maski, korelacje, RCT/APT, Von Neumann, SHA3-512, raporty i panel WWW działają na mocnym serwerze obliczeniowym.
-
-> Projekt nadal jest eksperymentalnym źródłem entropii. Każdy typ kamery i tor wejściowy wymaga osobnej oceny SP 800-90B. Dobrych wyników SHA3 nie wolno utożsamiać z udowodnioną min-entropią wejścia.
-
-## Architektura
-
-### USB przez bezpieczną sieć
-
-```text
-host przy kamerze USB
-  V4L2 / YUYV
-  → bezpośrednie wyjęcie kanału Y
-  → niekompresowane ramki Y8
-  → mTLS 1.3 + numer ramki + timestamp źródła + SHA-256 ramki
-                       │
-                       ▼
-serwer obliczeniowy
-  disjoint k=4
-  → temporalny XOR LSB
-  → aktywna maska
-  → checkerboard-even
-  → RCT/APT
-  → diagnostyczny Von Neumann
-  → SHA3-512 2048 → 512
-```
-
-Host USB **nie wykonuje** kalibracji, ekstrakcji entropii, RCT/APT, Von Neumanna, SHA3 ani analiz. Wykonuje tylko obsługę V4L2, wyjęcie istniejących bajtów Y z YUYV, kontrolę ekspozycji, TLS i kontrolną sumę SHA-256 transportowanej ramki.
-
-W sieci nie używamy JPEG, H.264 ani H.265 dla kamery USB. Przesyłany jest niezmieniony, niekompresowany kanał Y8.
-
-### RTSP
-
-```text
-kamera RTSP
-  H.264 / H.265 / MJPEG / inny kodek
-  → FFmpeg na serwerze obliczeniowym
-  → zdekodowana płaszczyzna Y8
-  → ten sam pipeline analityczny
-```
-
-RTSP jest osobnym modelem źródła. Typowa kamera RTSP dostarcza dane po ISP i stratnym kodeku. Wyników RTSP nie wolno mieszać z kwalifikacją bezpośredniego USB/YUYV ani łączyć kilku kamer w jeden strumień przed osobną oceną każdego źródła.
-
-## Tryby wejścia
-
-```text
-SOURCE_TYPE=v4l2   lokalna kamera USB, zgodność z v6.1.3
-SOURCE_TYPE=tls-y  zdalny agent USB przez wzajemny TLS 1.3
-SOURCE_TYPE=rtsp   odbiór i dekodowanie przez FFmpeg
-```
-
-Jeden proces przetwarza jedno źródło. Kilka kamer uruchamia się jako osobne instancje z innymi `PORT`, `RUN_DIR` i katalogami danych. Takie rozdzielenie zapobiega przypadkowemu mieszaniu modeli entropii.
-
-## Wymagania
-
-### Host USB
-
-- Linux, Python 3 i `venv`;
-- `v4l2-ctl`;
-- dostęp R/W do `/dev/video*` bez `sudo`;
-- sieć do serwera obliczeniowego;
-- certyfikat agenta, klucz agenta i zaufany CA.
-
-`run_usb_agent.sh` tworzy osobne `.venv-agent` i instaluje tylko NumPy oraz OpenCV headless.
-
-### Serwer obliczeniowy
-
-- Linux, Python 3 i `venv`;
-- `curl`, `flock`, `sha256sum`;
-- dla RTSP: `ffmpeg` i `ffprobe`;
-- dla lokalnego V4L2: również `v4l2-ctl`.
-
-## 1. Utworzenie lokalnego PKI mTLS
-
-W bezpiecznym miejscu:
-
-```bash
-chmod +x ./*.sh
-
-./generate_mtls_pki.sh
-```
-
-Bez dodatkowych zmiennych skrypt używa `pki/` w katalogu projektu i generuje certyfikat serwera dla `camera` / `192.168.1.2`. Skrypt tworzy:
-
-```text
-ca.crt
-ca.key
-agent.crt
-agent.key
-client.crt
-client.key
-```
-
-Na host USB kopiujemy tylko:
-
-```text
-ca.crt
-agent.crt
-agent.key
-```
-
-Na serwer obliczeniowy:
-
-```text
-ca.crt
-client.crt
-client.key
-```
-
-`ca.key` nie jest potrzebny do pracy i powinien pozostać poza hostami roboczymi. Klucze prywatne muszą mieć prawa `0600`.
-
-## 2. Agent na hoście USB
-
-```bash
-DEVICE=/dev/video1 \
-EXPOSURE=7000 \
-TLS_PORT=9443 \
-./run_usb_agent.sh
-```
-
-Domyślnie agent:
-
-- wymaga certyfikatu klienta podpisanego przez wskazany CA;
-- wymaga TLS 1.3;
-- udostępnia jednego klienta naraz;
-- wysyła Y8 `1280×720` bez kompresji;
-- przesyła identyfikator i czas przechwycenia każdej ramki;
-- okresowo kontroluje `auto_exposure=1` oraz `exposure_time_absolute=7000`;
-- zamyka sesję po zmianie kontrolek.
-
-Port `9443` należy ograniczyć firewallem wyłącznie do adresu serwera obliczeniowego.
-
-Domyślne ścieżki agenta to `pki/ca.crt`, `pki/agent.crt` i `pki/agent.key` względem katalogu projektu. Można je nadpisać przez `PKI_DIR`, `TLS_CA`, `TLS_CERT` i `TLS_KEY`.
-
-## 3. Smoke zdalnej kamery USB
-
-Na mocnym serwerze:
-
-```bash
-EXPOSURE=7000 \
-./run_remote_usb_smoke.sh
-```
-
-Normalny przebieg:
-
-```bash
-SOURCE_TYPE=tls-y \
-WARMUP_SECONDS=1800 \
-CALIBRATION_PAIRS=512 \
-CONDITIONED_BYTES=104857600 \
-./run_one.sh
-```
-
-Domyślne połączenie klienta używa `TLS_HOST=192.168.1.2`, `TLS_SERVER_NAME=camera` oraz `pki/ca.crt`, `pki/client.crt` i `pki/client.key` z katalogu projektu. Każdą z tych wartości można nadpisać zmienną środowiskową.
-
-Domyślnie przerwa w numeracji ramek z agenta jest błędem fail-closed. `ALLOW_SOURCE_FRAME_GAPS=1` istnieje wyłącznie do diagnostyki i nie powinno być używane w kwalifikacji.
-
-## 4. RTSP
-
-Najbezpieczniej przechowywać pełny URL, w tym hasło, w pliku z prawami `0600`:
-
-```bash
-install -m 600 /dev/null ~/.config/camera-entropy/camera01.rtsp
-printf '%s\n' 'rtsp://user:password@192.168.1.60:554/cam/realmonitor?channel=1&subtype=0' \
-  > ~/.config/camera-entropy/camera01.rtsp
-```
-
-Smoke:
-
-```bash
-RTSP_URL_FILE=~/.config/camera-entropy/camera01.rtsp \
-RTSP_TRANSPORT=tcp \
-RTSP_LUMA_MODE=extract-y \
-./run_rtsp_smoke.sh
-```
-
-Program nie zapisuje hasła w `command.txt`, `runner_config.json`, panelu ani manifeście. W logach URL jest redagowany.
-
-Dostępne ustawienia:
-
-```text
-RTSP_TRANSPORT=tcp|udp|http|https
-RTSP_LUMA_MODE=extract-y|gray-convert
-RTSP_TIMEOUT_SECONDS=15
-RTSP_STRICT_DIMENSIONS=0|1
-WIDTH=1280
-HEIGHT=720
-```
-
-`extract-y` pobiera zdekodowaną płaszczyznę luminancji. `gray-convert` jest wariantem zgodności dla źródeł, dla których filtr `extractplanes=y` nie działa.
-
-Sam `rtsp://` nie zapewnia poufności poświadczeń ani obrazu. Kamera RTSP powinna pracować w odizolowanym VLAN-ie, przez VPN albo przez wariant szyfrowany obsługiwany przez konkretną kamerę.
-
-## 5. Lokalny tryb zgodności
-
-```bash
-SOURCE_TYPE=v4l2 \
-DEVICE=/dev/video1 \
-./smoke_preproduction.sh
-```
-
-## Dual weave v2: same-group kontra stagger
-
-Wyniki v7.2 pokazały, że zwykły dual weave odzyskuje około `2×` przepustowości, lecz przenosi lokalną korelację pikseli do relacji krzyżowej `C0↔C1` przy przesunięciu `±1`. v7.3 dodaje dwa warianty czasowego rozdzielenia komplementarnych faz:
-
-```text
-same-group: C0_g + C1_g
-stagger-1:  C0_g + C1_(g+1)
-stagger-2:  C0_g + C1_(g+2)
-```
-
-W `row-major` komplementarne strumienie są budowane jako:
-
-```text
-C0_g = A_g[EVEN] + B_g[ODD]
-C1_g = B_g[EVEN] + A_g[ODD]
-```
-
-Piksele aktywnej maski są czytane od lewej do prawej, wiersz po wierszu. Nie następuje przeplatanie pojedynczych bitów C0/C1. Conditioner dostaje dwa bloki po 1024 bity.
-
-Dla `stagger-2` pierwsze dwie grupy `C1` oraz dwie końcowe grupy `C0` nie trafiają do conditionera. Pierwszy pełny blok ma dokładnie postać `C0_g || C1_(g+2)`. W długim przebiegu strata jest pomijalna, a każda wykorzystana próbka nadal występuje tylko raz.
-
-### Skupiony smoke row-major / stagger-2
-
-Profil WWW:
-
-```text
-dual-weave-stagger2
-```
-
-lub z terminala:
-
-```bash
-SOURCE_TYPE=tls-y ./smoke_dual_weave_stagger2.sh
-```
-
-Profil uruchamia tylko `row-major / stagger-2`, zachowuje checkerboard EVEN/ODD i automatycznie generuje raport geometrii 2D.
-
-### Smoke porównawczy
-
-Profil WWW:
-
-```text
-dual-weave
-```
-
-lub z terminala:
-
-```bash
-SOURCE_TYPE=tls-y ./smoke_dual_weave.sh
-```
-
-Domyślnie smoke używa:
-
-```text
-exposure:              7000
-pairing:               disjoint/k4
-order:                 row-major
-alignments:            same-group, stagger-1, stagger-2
-warm-up:               60 s
-calibration:           128 par
-baseline SHA3:         5 MiB
-każdy dual SHA3:       5 MiB
-C0/C1 VN:              5 MiB
-walidacja:             4 MiB
-conditioner:           2048 → 512
-```
-
-Najważniejsze pliki:
-
-```text
-dual_weave_row_major_c0_raw_validation.bin
-dual_weave_row_major_c1_raw_validation.bin
-
-dual_weave_row_major_same_group_conditioner_input_validation.bin
-dual_weave_row_major_same_group_sha3_512.bin
-
-dual_weave_row_major_stagger_1_conditioner_input_validation.bin
-dual_weave_row_major_stagger_1_sha3_512.bin
-
-dual_weave_row_major_stagger_2_conditioner_input_validation.bin
-dual_weave_row_major_stagger_2_sha3_512.bin
-```
-
-Raport:
-
-```text
-dual_weave_report.html
-dual_weave_report.json
-dual_weave_comparison.csv
-dual_weave_cross_correlation.csv
-dual_weave_positional_correlation.csv
-binary_geometry_report.html
-binary_geometry_summary.json
-binary_geometry_metrics.csv
-dual_weave_stagger2_checkerboard.svg
-```
-
-### Geometria 2D plików BIN
-
-`run_one.sh` domyślnie uruchamia analizę geometrii dla przebiegów dual weave. Analiza tworzy macierz `256 × 256` o stałej orientacji:
-
-```text
-X = B_n
-Y = B_(n+1)
-wartość = liczba wystąpień pary X → Y
-```
-
-Powstają trzy obrazy:
-
-```text
-byte_histogram_<strumień>.png       częstość 256 wartości bajtu + poziom 1/256
-byte_pairs_2d_<strumień>.png        log10(1 + obserwowana liczność pary)
-byte_pairs_residual_<strumień>.png  reszta Pearsona (O-E)/sqrt(E), skala -8…+8
-```
-
-Model niezależności zachowuje oba histogramy marginalne:
-
-```text
-E(x,y) = count_X(x) × count_Y(y) / N
-```
-
-Histogram pokazuje marginalny bias wartości bajtów. Heatmapa liczności pokazuje wszystkie struktury przejść, również te wynikające wyłącznie z tego biasu, a mapa reszt izoluje lokalne odchylenia od niezależności kolejnych bajtów. Nad heatmapą i po jej lewej stronie znajdują się marginalne histogramy `B_n` i `B_(n+1)`.
-
-Obrazy nie są samodzielną „entropią 2D”. Z tych samych danych raport liczy:
-
-```text
-H(X), H(Y)    entropie obu histogramów marginalnych
-H(X,Y)        entropia łączna pary, maksimum 16 bitów
-H(Y|X)        niepewność następnego bajtu po poznaniu poprzedniego
-Hmin(X,Y)     histogramowa min-entropia pary
-I(X;Y)        informacja wzajemna
-MI excess     MI ponad deterministyczny shuffle-baseline
-chi2 / df     globalne odchylenie od modelu niezależności
-Cramer V      znormalizowana siła zależności
-|r| p95/p99   percentyle bezwzględnych reszt Pearsona
-```
-
-Skompresowany plik `byte_pairs_counts_<strumień>.npz` zawiera `counts`, `expected`, `pearson_residuals`, `log2_enrichment`, `x_counts`, `y_counts` i `byte_counts`, więc można wykonać dalszą analizę bez ponownego czytania dużego BIN-a.
-
-Jeżeli odpowiednie pliki istnieją, raport zawsze rezerwuje miejsce dla czterech etapów porównawczych:
-
-```text
-Direct LSB → temporal difference + active mask → Von Neumann → SHA3-512
-```
-
-W sekcji porównawczej histogramy używają wspólnej skali częstotliwości, wszystkie heatmapy liczności wspólnego maksimum `log10(1+count)`, a mapy reszt wspólnej skali `-8…+8`. Dzięki temu nie można przypadkowo ukryć różnic przez automatyczne przeskalowanie każdego obrazu osobno. Każdy histogram ma również interaktywny odpowiednik Plotly w raporcie.
-
-Raport celowo ogranicza się do wykresów 2D. Nie generuje powierzchni wolumetrycznych, chmur trójek ani dodatkowych artefaktów WebGL. Zmniejsza to czas analizy, rozmiar raportu i obciążenie przeglądarki, bez usuwania kluczowych metryk przejść bajtowych.
-
-Limity analizy można ustawić przez:
-
-```text
-BINARY_GEOMETRY_REPORT=0|1
-BINARY_GEOMETRY_MAX_FILES=8
-BINARY_GEOMETRY_MAX_BYTES=16777216
-```
-
-### Nowe kontrole v7.3
-
-Każdy conditioner zapisuje własne:
-
-```text
-production_started_utc
-conditioner_completed_utc
-time_to_target_seconds
-output_bps_until_complete
-```
-
-Przepustowość nie jest już dzielona przez czas trwania całego zadania równoległego. Dzięki temu dual weave można poprawnie porównać z baseline checkerboard-even.
-
-Analiza wejścia SHA3 obejmuje:
-
-```text
-lagi: 1022, 1023, 1024, 1025, 1026
-lagi: 2047, 2048, 2049
-C0[j] ↔ C1[j-2..j+2] wewnątrz każdego bloku
-```
-
-Dodatkowo fail-closed clipping działa osobno na:
-
-```text
-full active mask
-checkerboard-even
-checkerboard-odd
-```
-
-Przekroczenie progu przez dowolną fazę odrzuca parę i po wymaganej liczbie kolejnych zdarzeń zatrzaskuje generator.
-
-### Kampania lagów
-
-```bash
-SOURCE_TYPE=tls-y ./smoke_dual_weave_lags.sh
-```
-
-Sekwencja pozostaje:
-
-```text
-k4-start → k2 → k8 → k4-repeat
-```
-
-Każdy przebieg porównuje domyślnie `same-group` i docelowy `stagger-2` w `row-major`.
-
-### Długa kwalifikacja stagger-2
-
-Po pozytywnym smoke:
-
-```bash
-SOURCE_TYPE=tls-y ./qualification_dual_weave_stagger.sh
-```
-
-Domyślnie powstają trzy przebiegi, każdy z:
-
-```text
-warm-up pierwszego:    1800 s
-warm-up kolejnych:     300 s
-calibration:           512 par
-baseline SHA3:         100 MiB
-dual stagger-2 SHA3:   100 MiB
-walidacja RAW:         10 MiB
-VN diagnostyczny:      10 MiB
-```
-
-Profil jest również dostępny w panelu WWW jako:
-
-```text
-dual-weave-stagger-qualification
-```
-
-### Sumy SHA-256
-
-`SHA256SUMS` jest teraz tworzony rekursywnie. Dla kampanii zawiera pliki BIN z katalogów wszystkich przebiegów zamiast pustego pliku na poziomie kampanii.
-
-Dual weave pozostaje kandydatem przedprodukcyjnym. Wynik SHA3 nie zastępuje estymacji SP 800-90B non-IID.
-
-## Kwalifikacja
-
-`qualification_preproduction.sh` przekazuje ustawienia źródła do `run_one.sh`, więc działa również dla `tls-y` i `rtsp`.
-
-Przykład zdalnego USB:
-
-```bash
-SOURCE_TYPE=tls-y \
-RUNS=3 \
-./qualification_preproduction.sh
-```
-
-Dla każdej innej kamery RTSP należy utworzyć osobną kampanię, osobny katalog wyników i osobną ocenę non-IID/restart.
-
-## Bezpieczeństwo transportu USB
-
-Warstwa aplikacyjna ramki zawiera:
-
-```text
-wersję protokołu
-source_id
-frame_id
-czas Unix i monotoniczny z hosta przechwytującego
-width / height / pixel_format=Y8
-stan kontrolek kamery
-liczbę bajtów
-SHA-256 payloadu
-```
-
-TLS zapewnia poufność, integralność i wzajemne uwierzytelnienie. SHA-256 ramki jest dodatkową kontrolą diagnostyczną i nie jest conditionerem entropii.
-
-## Przepustowość sieci
-
-Dla Y8 `1280×720`:
-
-```text
-1 ramka = 921 600 B
-1,5 FPS  ≈ 11,1 Mbit/s
-10 FPS   ≈ 73,7 Mbit/s
-```
-
-Gigabit Ethernet ma duży zapas. Wi-Fi jest mniej pożądane ze względu na zmienność opóźnień i zerwania; przerwa numeracji ramek domyślnie zatrzymuje przebieg.
-
-## Najważniejsze pliki
-
-```text
-usb_y_capture_agent.py       agent przy kamerze USB
-frame_transport.py           protokół i konfiguracja mTLS
-frame_sources.py             V4L2 / TLS-Y / RTSP
-camera_entropy_server.py     cały pipeline obliczeniowy
-smoke_temporal_sha3.sh       temporal LSB + pełna maska + health tests + SHA3-512
-spatial_sampling.py          maski, offset bez wrap-around i serializacja bitów
-spatial_profile.sh           wspólna baza profili geometrii przestrzennej
-smoke_spatial_profiles.sh    pełna kampania porównawcza wszystkich profili przestrzennych
-summarize_spatial_campaign.py  indeks JSON/HTML kampanii przestrzennej
-spatial_docs.py              chroniona przeglądarka README/Markdown/instrukcji pod /docs/
-SPATIAL_SAMPLING.md          pełna dokumentacja parametrów i interpretacji wyników
-smoke_dual_weave.sh          same-group kontra stagger-1/stagger-2
-smoke_dual_weave_stagger2.sh skupiony kandydat row-major / stagger-2
-smoke_dual_weave_lags.sh     kampania k4/k2/k8/k4: same-group kontra stagger-2
-analyze_dual_weave.py        lagi 1023/1024/1025, korelacja pozycyjna i raporty
-analyze_binary_geometry.py   histogramy bajtów, liczności, reszty vs niezależność oraz entropie/MI
-run_usb_agent.sh             uruchomienie hosta USB
-run_remote_usb_smoke.sh      smoke z mTLS-Y
-run_rtsp_smoke.sh            smoke RTSP
-run_one.sh                   wspólny runner obliczeniowy
-generate_mtls_pki.sh         lokalne CA i certyfikaty
-```
-
-## Ograniczenia v7.9.0
-
-- jedna instancja przetwarza jedno źródło;
-- agent USB obsługuje jednego klienta naraz;
-- RTSP używa czasu odbioru po dekodowaniu, nie PTS kamery, do raportowania `pair_delta_seconds`;
-- brak sterowania ekspozycją kamer RTSP, ponieważ mechanizm jest zależny od producenta/ONVIF;
-- nie ma automatycznego łączenia entropii z wielu kamer;
-- stagger usuwa bezpośrednie współdzielenie grupy, ale nie dowodzi niezależności C0 i C1;
-- histogramy bajtów i heatmapy 2D są diagnostyką wizualną i nie są formalnym estymatorem min-entropii;
-- diagnostyka live utrzymuje macierze `256×256` w pamięci dla obserwowanych etapów; dla wielu wariantów dual weave należy ograniczyć `LIVE_HEATMAP_MAX_STAGES`;
-- certyfikacja i deklaracja min-entropii nadal wymagają pełnej oceny źródła.
-
-### API read-only dla późniejszej analizy
-
-Po włączeniu tokenu share dostępne są również:
-
-```text
-/share/<token>/api/runs
-/share/<token>/api/latest
-```
-
-`api/latest` zwraca metadane najnowszego przebiegu oraz, gdy istnieją, `qualification_summary.json`, `dual_weave_report.json`, `binary_geometry_summary.json`, `runner_summary.json`, `READY.json` lub `run_failed.json`. Dzięki temu zewnętrzny analizator może odczytać wynik bez dostępu do panelu administracyjnego.
-
-## Buforowane klatki Y8 / LSB
-
-Projekt może równolegle zapisywać surowe klatki Y8 lub pakowane LSB i używać ich jako źródła `dataset-y`, także w trakcie rośnięcia datasetu. Domyślny wskaźnik to `data/frame-buffer-latest`. Pełna instrukcja, format plików i zasady bezpiecznego odczytu LIVE znajdują się w [BUFFERED_DATASETS.md](BUFFERED_DATASETS.md).
-
-<!-- CAMERA_ENTROPY_MULTI_LSB_V7_9 -->
-## Multi-LSB i profil GLOBAL (v7.9.0)
-
-Domyślna konfiguracja pozostaje zgodna wstecznie:
-
-```text
-SAMPLE_MODE=xor
-LSB_BITS=1
-ENTROPY_CREDIT_BITS_PER_PIXEL=1.0
-```
-
-Zamrożona aktywna maska jest zawsze kalibrowana na czasowym XOR bitu `LSB0`, aby wyniki różnych profili można było porównywać. Parametry `SAMPLE_MODE` i `LSB_BITS` określają natomiast dane serializowane za tą maską:
-
-```bash
-SAMPLE_MODE=xor    LSB_BITS=2 ENTROPY_CREDIT_BITS_PER_PIXEL=0.5 ./run_one.sh
-SAMPLE_MODE=direct LSB_BITS=4 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=8192 ./run_one.sh
-SAMPLE_MODE=delta  LSB_BITS=4 ENTROPY_CREDIT_BITS_PER_PIXEL=0.25 CONDITIONER_INPUT_BITS=8192 ./run_one.sh
-```
-
-Bity są zapisywane w kolejności `pixel-major-lsb-first`: dla każdego wybranego piksela najpierw `b0`, potem `b1` itd. `ENTROPY_CREDIT_BITS_PER_PIXEL` jest niezależny od liczby pobieranych bitów. To konserwatywny parametr pochodzący z zewnętrznej oceny źródła, a nie wartość dowiedziona przez ENT, Dieharder lub raport. Serwer odrzuca blok wejściowy SHA3-512, który przy zadanym kredycie wypuszczałby więcej bitów, niż wolno zaliczyć.
-
-Pełne kampanie:
-
-```bash
-./smoke_lsb_profiles.sh                 # xor/direct/delta × 1..4 LSB, łącznie 12 przebiegów
-./qualification_global_all_profiles.sh # wszystkie wcześniejsze profile WWW + kampania LSB
-```
-
-`GLOBAL_CONTINUE_ON_ERROR=1` jest ustawieniem domyślnym: po błędzie uruchamiane są kolejne profile, ale końcowy kod wyjścia pozostaje niezerowy. Każdy przebieg zapisuje `lsb_bitplane_report.html`; kampanie tworzą `lsb_campaign_report.html` oraz `global_campaign_report.html`.
-
-Raport kampanii LSB porównuje również przepustowość surowego i maskowanego wejścia, czas osiągnięcia celu SHA3 oraz przepustowość wyjścia conditionera. Raport geometrii binarnej zawiera wyłącznie histogram bajtów, macierz przejść 2D i mapę reszt Pearsona — bez wykresów 3D.
-
-## Cache weryfikacji datasetu
-
-Przy `DATASET_VERIFY_HASHES=1` niezmieniony zatrzymany dataset korzysta domyślnie z audytowalnego cache w `data/.integrity-cache/`. Pełne hashowanie jest powtarzane automatycznie po zmianie manifestu checksum, listy chunków, rozmiaru lub czasu modyfikacji któregokolwiek chunku. Świeżą weryfikację można wymusić przez `DATASET_VERIFY_CACHE=0`.
+Historia zmian: [docs/CHANGELOG.md](docs/CHANGELOG.md).

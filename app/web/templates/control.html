@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Camera Entropy — Panel kontrolny</title>
+<style>
+:root{color-scheme:dark;--bg:#07111c;--panel:#0d1b2a;--panel2:#102438;--line:#25445f;--text:#e7f1fa;--muted:#9cb2c5;--accent:#54d5ff;--accent2:#78f0b3;--warn:#ffc766;--bad:#ff7f8d;--shadow:0 12px 35px rgba(0,0,0,.28)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 15% 0,#12314c 0,transparent 34%),var(--bg);color:var(--text);font:15px/1.48 system-ui,-apple-system,Segoe UI,sans-serif}
+a{color:var(--accent)}button,input,select{font:inherit}header.top{position:sticky;top:0;z-index:30;background:rgba(7,17,28,.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);box-shadow:0 5px 20px rgba(0,0,0,.24)}.top-inner{max-width:1700px;margin:auto;padding:11px 22px;display:flex;align-items:center;gap:14px}.brand{font-weight:800;letter-spacing:.02em;white-space:nowrap}.version{color:var(--muted);font-size:.8rem}.nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}.btn,.nav a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 13px;border:1px solid var(--line);border-radius:9px;background:#10283d;color:var(--text);text-decoration:none;cursor:pointer;font-weight:700}.btn.primary{background:linear-gradient(135deg,#0785ad,#0d668d);border-color:#35c8f4}.btn.danger{background:#4b1f2a;border-color:#9a4354}.btn:disabled,.nav a.disabled{opacity:.42;cursor:not-allowed;pointer-events:none}.wrap{max-width:1700px;margin:auto;padding:22px}.notice{padding:11px 14px;border-radius:9px;background:#402934;border:1px solid #9b4d5f;color:#ffdce1;margin-bottom:14px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:18px}.card{background:linear-gradient(145deg,var(--panel),#0a1724);border:1px solid var(--line);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow)}.card small{display:block;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.card strong{display:block;margin-top:6px;font-size:1.08rem;overflow-wrap:anywhere}.card.good{border-color:#257c60}.card.warn{border-color:#8b6a2c}.card.bad{border-color:#9d3f50}.panel{background:rgba(13,27,42,.96);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}.panel-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:15px;justify-content:space-between}.panel-head h2{margin:0}.panel-head p{margin:4px 0 0;color:var(--muted)}.panel-body{padding:20px}.profile-banner{padding:13px 15px;border:1px solid #297395;background:#0d2c42;border-radius:10px;margin:12px 0;color:#d7f5ff}.flow{display:grid;gap:15px}.stage{border:1px solid var(--line);border-radius:12px;background:var(--panel2);overflow:hidden}.stage>header{padding:13px 16px;background:#0c2031;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center}.stage-number{width:31px;height:31px;border-radius:50%;display:grid;place-items:center;background:#164966;color:#eaffff;font-weight:900}.stage h3{margin:0}.stage p{margin:2px 0 0;color:var(--muted);font-size:.88rem}.fields{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:13px;padding:16px}.field{min-width:0}.field.wide{grid-column:span 2}.field.full{grid-column:1/-1}.field label{display:block;font-weight:700;margin-bottom:5px}.field .help{display:block;color:var(--muted);font-size:.78rem;margin-top:5px;min-height:1.1em}.field input[type=text],.field input[type=number],.field select{width:100%;height:40px;background:#071725;color:var(--text);border:1px solid #31546e;border-radius:8px;padding:7px 9px}.field input:focus,.field select:focus{outline:2px solid rgba(84,213,255,.35);border-color:var(--accent)}.check{display:flex;align-items:flex-start;gap:9px;padding-top:7px}.check input{margin-top:4px;transform:scale(1.1)}.check label{font-weight:600}.advanced{border-top:1px dashed var(--line);padding:0 16px 15px}.advanced summary{cursor:pointer;padding:13px 0;color:#cdefff;font-weight:800}.advanced .fields{padding:5px 0 0}.profile-locked{opacity:.58}.profile-locked input,.profile-locked select{cursor:not-allowed}.preset-field{box-shadow:0 0 0 2px rgba(120,240,179,.62)!important;border-color:var(--accent2)!important}.disabled-block{opacity:.43}.dependency-note{display:none;color:var(--warn);font-size:.8rem;margin-top:4px}.actions{position:sticky;bottom:10px;z-index:20;display:flex;gap:10px;justify-content:flex-end;padding:13px 15px;background:rgba(7,17,28,.93);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin-top:16px}.table-scroll{max-width:100%;overflow-x:auto;overflow-y:visible;position:relative;isolation:isolate;border:1px solid #203b52;border-radius:10px;background:#081722}.table-scroll table{width:100%;border-collapse:separate;border-spacing:0;min-width:1080px}.table-scroll th,.table-scroll td{text-align:left;padding:10px 11px;border-bottom:1px solid #203b52;vertical-align:top;line-height:1.35;overflow-wrap:anywhere}.table-scroll th{color:#bceeff;background:#0a1c2b;position:sticky;top:0;z-index:4;box-shadow:0 1px 0 #31546e;white-space:nowrap}.table-scroll tbody tr:nth-child(even) td{background:rgba(16,36,56,.32)}.table-scroll tbody tr:hover td{background:rgba(84,213,255,.07)}.table-scroll tbody tr:last-child td{border-bottom:0}.jobs-table{min-width:1180px!important}.reports-table{min-width:1050px!important}.jobs-table td:nth-child(1),.jobs-table td:nth-child(5),.jobs-table td:nth-child(7),.reports-table td:nth-child(2),.reports-table td:nth-child(4),.reports-table td:nth-child(5){white-space:nowrap}.jobs-table td:nth-child(3){min-width:250px}.jobs-table td:nth-child(4){min-width:180px}.jobs-table td:nth-child(6),.reports-table td:nth-child(1){min-width:270px}.reports-table td:nth-child(3){min-width:280px}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:.78rem}.job-actions{display:flex;gap:6px;flex-wrap:wrap}.mini{padding:4px 8px;min-height:29px;font-size:.78rem}.logbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.logbar select{min-width:280px;max-width:720px;flex:1}.log{background:#02070d;border:1px solid #1f3d54;border-radius:10px;padding:12px;min-height:360px;height:min(68vh,760px);overflow:auto;white-space:pre-wrap;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:20px}.modal-window{width:min(1500px,96vw);max-height:94vh;background:#0b1a28;border:1px solid #35607e;border-radius:14px;box-shadow:0 25px 90px rgba(0,0,0,.65);display:flex;flex-direction:column;overflow:hidden}.modal-head{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line);background:#0d2436}.modal-head h3{margin:0}.modal-head .modal-spacer{flex:1}.modal-body{padding:14px;overflow:hidden}.modal-backdrop[hidden]{display:none}.log-status{color:var(--muted);font-size:.82rem}body.modal-open{overflow:hidden}.muted{color:var(--muted)}.callout{border-left:4px solid var(--accent);padding:10px 13px;background:#092337;border-radius:0 8px 8px 0}.hidden{display:none!important}
+@media(max-width:1200px){.fields{grid-template-columns:repeat(3,minmax(170px,1fr))}}@media(max-width:850px){.fields{grid-template-columns:repeat(2,minmax(150px,1fr))}.field.wide{grid-column:span 2}.top-inner{align-items:flex-start}.brand{white-space:normal}}@media(max-width:560px){.wrap{padding:12px}.fields{grid-template-columns:1fr}.field.wide{grid-column:1}.panel-body{padding:12px}.stage>header{padding:11px}.nav{margin-left:0}.top-inner{flex-wrap:wrap}.actions{position:static;flex-direction:column}.actions .btn{width:100%}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-inner">
+  <div><div class="brand">Camera Entropy · Control Plane</div><div class="version">{{ version }}</div></div>
+  <nav class="nav">
+    <a id="previewBtn" class="disabled" href="/live" target="_blank">Podgląd aktywnego workera</a>
+    <a href="#start">Uruchom test</a><a href="#jobs">Zadania</a><a href="#reports">Raporty</a><a href="/data/">Dane</a>
+    {% if share_url %}<a href="{{ share_url }}" target="_blank">Share</a>{% endif %}
+    <form action="/logout" method="post" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Wyloguj</button></form>
+  </nav>
+</div></header>
+<main class="wrap">
+<div id="error" class="notice" hidden></div>
+<div id="statusCards" class="cards"></div>
+
+<section id="start" class="panel">
+  <div class="panel-head"><div><h2>Uruchom test</h2><p>Konfiguracja jest uporządkowana zgodnie z rzeczywistą kolejnością pipeline’u.</p></div></div>
+  <div class="panel-body">
+    <form id="startForm">
+      <div class="field full">
+        <label for="profile">Profil</label>
+        <select id="profile" name="profile">
+        {% for category, rows in profiles|groupby('category') %}<optgroup label="{{ category }}">{% for p in rows %}<option value="{{ p.id }}" data-help="{{ p.help }}" {% if p.id=='final-preproduction' %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</optgroup>{% endfor %}
+        </select>
+        <div id="profileHelp" class="profile-banner"></div>
+      </div>
+
+      <div class="flow">
+        <section class="stage"><header><span class="stage-number">1</span><div><h3>Źródło danych</h3><p>Wybór transportu, zakresu danych i integralności wejścia.</p></div></header><div class="fields">
+          <div class="field wide"><label for="source_id">Źródło</label><select id="source_id" name="source_id">{% for s in sources %}<option value="{{ s.id }}" data-source-type="{{ s.source_type }}" {% if s.id==default_source_id %}selected{% endif %}>{{ s.label }} · {{ s.source_type }}</option>{% endfor %}</select><span class="help">Źródła i dane uwierzytelniające są definiowane w sources.json.</span></div>
+          <div class="field" id="exposureField"><label for="exposure">Ekspozycja</label><input id="exposure" name="exposure" type="number" min="1" value="7000"><span class="help">Dotyczy źródeł LIVE.</span></div>
+          <div class="field"><label for="warmup_seconds">Warm-up [s]</label><input id="warmup_seconds" name="warmup_seconds" type="number" min="0" value="0"><span class="help">Agent przekazuje rzeczywisty czas rozgrzania.</span></div>
+          <div id="datasetFields" class="field full"><div class="fields" style="padding:0">
+            <div class="field"><label for="dataset_scope">Zakres datasetu</label><select id="dataset_scope" name="dataset_scope"><option value="all-available">Całość dostępna w chwili startu</option><option value="output-limit">Do osiągnięcia limitów wyjścia</option><option value="range">Wybrany zakres klatek</option><option value="follow">Śledź aktywny zapis</option></select><span class="help">„Całość” robi snapshot liczby klatek i nie kończy po osiągnięciu limitu pliku.</span></div>
+            <div class="field range-field"><label for="dataset_start_frame">Pierwsza klatka</label><input id="dataset_start_frame" name="dataset_start_frame" type="number" min="0" value="0"></div>
+            <div class="field range-field"><label for="dataset_max_frames">Liczba klatek</label><input id="dataset_max_frames" name="dataset_max_frames" type="number" min="0" value="0"></div>
+            <div class="field"><div class="check"><input id="dataset_verify_hashes" name="dataset_verify_hashes" type="checkbox" checked><label for="dataset_verify_hashes">Weryfikuj SHA-256 zamkniętych chunków</label></div></div>
+            <div class="field verify-worker-field"><label for="dataset_verify_workers">Workery weryfikacji SHA-256</label><input id="dataset_verify_workers" name="dataset_verify_workers" type="number" min="1" max="64" value="8"><span class="help">NVMe/SSD: zwykle 4–16. Dysk talerzowy: zwykle 1–2.</span></div>
+            <div class="field verify-worker-field"><label for="dataset_verify_progress_seconds">Postęp weryfikacji co [s]</label><input id="dataset_verify_progress_seconds" name="dataset_verify_progress_seconds" type="number" min="1" max="60" value="2"></div>
+            <div class="field final-preprod-field"><label for="final_preprod_workers">Równoległe warianty testu</label><input id="final_preprod_workers" name="final_preprod_workers" type="number" min="1" max="5" value="5"><span class="help">Profil finalny ma pięć wariantów. Mniejsza wartość ogranicza I/O i RAM.</span></div>
+            <div class="field final-preprod-field"><label for="final_preprod_status_interval_seconds">Heartbeat analiz co [s]</label><input id="final_preprod_status_interval_seconds" name="final_preprod_status_interval_seconds" type="number" min="5" max="600" value="30"></div>
+            <div class="field verify-worker-field"><div class="check"><input id="dataset_verify_cache" name="dataset_verify_cache" type="checkbox" checked><label for="dataset_verify_cache">Użyj cache weryfikacji, gdy dataset nie zmienił się</label></div><span class="help">Cache jest akceptowany tylko wtedy, gdy manifest checksum, lista chunków, rozmiary i mtime są identyczne.</span></div>
+            <div class="field"><div class="check"><input id="dataset_realtime" name="dataset_realtime" type="checkbox"><label for="dataset_realtime">Odtwarzaj w czasie rzeczywistym</label></div></div>
+          </div></div>
+        </div></section>
+
+        <section class="stage"><header><span class="stage-number">2</span><div><h3>Kalibracja i maska „bad pixels”</h3><p>Zamrożenie aktywnych pikseli, clipping oraz niezależny shadow monitor.</p></div></header><div class="fields">
+          <div class="field"><label for="calibration_pairs">Pary kalibracyjne</label><input id="calibration_pairs" name="calibration_pairs" type="number" min="32" value="512"></div>
+          <div class="field"><label for="mask_p1_min">Mask P(1) min</label><input id="mask_p1_min" name="mask_p1_min" type="number" min="0" max="1" step="any" value="0.30"></div>
+          <div class="field"><label for="mask_p1_max">Mask P(1) max</label><input id="mask_p1_max" name="mask_p1_max" type="number" min="0" max="1" step="any" value="0.70"></div>
+          <div class="field"><label for="mask_clip_max">Maks. clipping podczas kalibracji</label><input id="mask_clip_max" name="mask_clip_max" type="number" min="0" max="1" step="any" value="0.01"></div>
+          <div class="field"><label for="mask_transition_min">Transition min</label><input id="mask_transition_min" name="mask_transition_min" type="number" min="0" max="1" step="any" value="0.20"></div>
+          <div class="field"><label for="mask_transition_max">Transition max</label><input id="mask_transition_max" name="mask_transition_max" type="number" min="0" max="1" step="any" value="0.80"></div>
+          <div class="field"><label for="max_active_clip_rate">Active clip rate max</label><input id="max_active_clip_rate" name="max_active_clip_rate" type="number" min="0" max="1" step="any" value="0.001"></div>
+          <div class="field"><label for="clip_fail_consecutive">Clipping: kolejne błędy</label><input id="clip_fail_consecutive" name="clip_fail_consecutive" type="number" min="1" value="3"></div>
+          <div class="field"><label for="shadow_min_active_retention">Shadow retention min</label><input id="shadow_min_active_retention" name="shadow_min_active_retention" type="number" min="0" max="1" step="any" value="0.95"></div>
+          <div class="field"><label for="shadow_min_jaccard">Shadow Jaccard min</label><input id="shadow_min_jaccard" name="shadow_min_jaccard" type="number" min="0" max="1" step="any" value="0.90"></div>
+          <div class="field"><label for="shadow_fail_consecutive">Shadow: kolejne błędy</label><input id="shadow_fail_consecutive" name="shadow_fail_consecutive" type="number" min="1" value="5"></div>
+          <div class="field"><label for="spatial_mask_pattern">Selekcja przestrzenna</label><select id="spatial_mask_pattern" name="spatial_mask_pattern"><option value="full">Pełna zamrożona maska</option><option value="checkerboard-even">Checkerboard even</option><option value="checkerboard-odd">Checkerboard odd</option><option value="grid">Grid</option><option value="block">Block</option><option value="legacy">Legacy</option></select></div>
+        </div><details class="advanced"><summary>Zaawansowana geometria maski</summary><div class="fields">
+          <div class="field legacy-field"><label for="spatial_sampling">Legacy sampling</label><select id="spatial_sampling" name="spatial_sampling"><option value="full">full</option><option value="checkerboard-even">checkerboard-even</option><option value="checkerboard-odd">checkerboard-odd</option><option value="grid2x2">grid2x2</option><option value="grid4x4">grid4x4</option></select></div>
+          <div class="field grid-field"><label for="spatial_step_x">Grid step X</label><input id="spatial_step_x" name="spatial_step_x" type="number" min="1" value="1"></div><div class="field grid-field"><label for="spatial_step_y">Grid step Y</label><input id="spatial_step_y" name="spatial_step_y" type="number" min="1" value="1"></div>
+          <div class="field phase-field"><label for="spatial_phase_x">Faza X</label><input id="spatial_phase_x" name="spatial_phase_x" type="number" min="0" value="0"></div><div class="field phase-field"><label for="spatial_phase_y">Faza Y</label><input id="spatial_phase_y" name="spatial_phase_y" type="number" min="0" value="0"></div>
+          <div class="field block-field"><label for="spatial_block_width">Block width</label><input id="spatial_block_width" name="spatial_block_width" type="number" min="1" value="4"></div><div class="field block-field"><label for="spatial_block_height">Block height</label><input id="spatial_block_height" name="spatial_block_height" type="number" min="1" value="4"></div>
+        </div></details></section>
+
+        <section class="stage"><header><span class="stage-number">3</span><div><h3>Tworzenie i ekstrakcja bitów</h3><p>Próbka źródłowa, parowanie temporalne, szerokość LSB i kolejność serializacji.</p></div></header><div class="fields">
+          <div class="field"><label for="sample_mode">Tryb próbki</label><select id="sample_mode" name="sample_mode"><option value="xor">Temporal XOR</option><option value="direct">Direct Y</option><option value="delta">Delta modulo 256</option></select></div>
+          <div class="field"><label for="lsb_bits">Liczba LSB</label><select id="lsb_bits" name="lsb_bits"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+          <div class="field"><label for="pairing_mode">Parowanie</label><select id="pairing_mode" name="pairing_mode"><option value="disjoint">disjoint</option><option value="sliding">sliding</option></select></div>
+          <div class="field"><label for="pair_lag_frames">Lag [klatki]</label><input id="pair_lag_frames" name="pair_lag_frames" type="number" min="1" max="4096" value="4"></div>
+          <div class="field"><label for="temporal_spatial_offset_x">Offset X</label><input id="temporal_spatial_offset_x" name="temporal_spatial_offset_x" type="number" min="-4096" max="4096" value="0"></div>
+          <div class="field"><label for="temporal_spatial_offset_y">Offset Y</label><input id="temporal_spatial_offset_y" name="temporal_spatial_offset_y" type="number" min="-4096" max="4096" value="0"></div>
+          <div class="field"><label for="serialization_order">Serializacja</label><select id="serialization_order" name="serialization_order"><option value="row-major">row-major</option><option value="serpentine">serpentine</option><option value="tile-interleave">tile-interleave</option></select></div>
+          <div class="field tile-field"><label for="serialization_tile_width">Tile width</label><input id="serialization_tile_width" name="serialization_tile_width" type="number" min="1" value="16"></div><div class="field tile-field"><label for="serialization_tile_height">Tile height</label><input id="serialization_tile_height" name="serialization_tile_height" type="number" min="1" value="16"></div>
+        </div></section>
+
+        <section class="stage"><header><span class="stage-number">4</span><div><h3>Ekstraktor Von Neumanna</h3><p>Opcjonalna, diagnostyczna ekstrakcja przed conditionerem. Możliwe 0–4 kolejne przejścia.</p></div></header><div class="fields">
+          <div class="field"><label for="von_neumann_passes">Liczba przejść VN</label><select id="von_neumann_passes" name="von_neumann_passes"><option value="0">0 — wyłączony</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select><span class="help">Każdy kolejny przebieg działa na wyniku poprzedniego i zwykle mocno obniża przepustowość.</span></div>
+          <div class="field vn-field"><label for="diagnostic_vn_mib">Plik VN [MiB]</label><input id="diagnostic_vn_mib" name="diagnostic_vn_mib" type="number" min="0" value="0"></div>
+        </div></section>
+
+        <section class="stage"><header><span class="stage-number">5</span><div><h3>Kondycjonowanie kryptograficzne</h3><p>Finalny, ograniczający długość outputu conditioner. Domyślnie SHA3-512.</p></div></header><div class="fields">
+          <div class="field"><label for="conditioner">Conditioner</label><select id="conditioner" name="conditioner"><option value="sha3-512">SHA3-512</option><option value="none">Brak — wyłącznie diagnostyka</option></select><span class="help">ChaCha20 nie jest tu oferowany jako zamiennik hash-conditionera bez osobnego projektu reseed/key lifecycle.</span></div>
+          <div class="field conditioner-field"><label for="entropy_credit_bits_per_pixel">Entropy credit [bit/piksel]</label><input id="entropy_credit_bits_per_pixel" name="entropy_credit_bits_per_pixel" type="number" min="0.000001" max="4" step="any" value="0.5"></div>
+          <div class="field conditioner-field"><label for="conditioner_input_bits">Wejście na blok [bit]</label><input id="conditioner_input_bits" name="conditioner_input_bits" type="number" min="512" step="8" value="2048"></div>
+          <div class="field conditioner-field"><label for="conditioned_mib">Finalny output [MiB]</label><input id="conditioned_mib" name="conditioned_mib" type="number" min="0" value="64"></div>
+        </div></section>
+
+        <section class="stage"><header><span class="stage-number">6</span><div><h3>Health tests i fail-closed</h3><p>Kontrola ekspozycji, RCT/APT, clipping i drift maski pozostają wymuszane w workerze.</p></div></header><div class="fields">
+          <div class="field"><label for="control_check_seconds">Kontrola ustawień [s]</label><input id="control_check_seconds" name="control_check_seconds" type="number" min="0" value="60"></div>
+          <div class="field"><label for="control_fail_consecutive">Kolejne niezgodności</label><input id="control_fail_consecutive" name="control_fail_consecutive" type="number" min="1" value="1"></div>
+          <div class="field"><label for="stream_stats_window_pairs">Okno pełnego datasetu [pary]</label><input id="stream_stats_window_pairs" name="stream_stats_window_pairs" type="number" min="1" value="1024"><span class="help">Streamingowe Hmin/bias/korelacje są liczone dla całego przebiegu oraz osobno dla każdego okna.</span></div>
+          <div class="field full"><p class="callout">RCT/APT dobierają poprawne okno do symboli 1-bitowych lub wielobitowych. Produkcyjna maska jest zamrożona; shadow monitor nie modyfikuje outputu, tylko wykrywa dryf.</p></div>
+        </div></section>
+
+        <section class="stage"><header><span class="stage-number">7</span><div><h3>Wyniki, diagnostyka i kampania</h3><p>Rozmiary plików, raporty i opcje kosztowne obliczeniowo.</p></div></header><div class="fields">
+          <div class="field"><label for="validation_mib">Walidacja raw [MiB]</label><input id="validation_mib" name="validation_mib" type="number" min="0" value="64"></div>
+          <div class="field"><label for="runs">Liczba przebiegów</label><input id="runs" name="runs" type="number" min="1" value="3"></div>
+          <div class="field"><label for="assessment_level">Poziom macierzy</label><select id="assessment_level" name="assessment_level"><option value="quick">quick</option><option value="full" selected>full</option><option value="exhaustive">exhaustive</option></select></div>
+          <div class="field"><div class="check"><input id="web_images" name="web_images" type="checkbox"><label for="web_images">Obrazy workera</label></div></div>
+          <div class="field"><div class="check"><input id="mask_snapshot_images" name="mask_snapshot_images" type="checkbox"><label for="mask_snapshot_images">Snapshoty masek</label></div></div>
+          <div class="field"><div class="check"><input id="live_byte_diagnostics" name="live_byte_diagnostics" type="checkbox"><label for="live_byte_diagnostics">Live byte diagnostics</label></div></div>
+        </div><details class="advanced"><summary>Zaawansowane opcje diagnostyczne i transportowe</summary><div class="fields">
+          <div class="field"><label for="live_heatmap_interval_seconds">Heatmap interval [s]</label><input id="live_heatmap_interval_seconds" name="live_heatmap_interval_seconds" type="number" min="0" value="60"></div>
+          <div class="field"><label for="live_heatmap_max_stages">Maks. etapy heatmap</label><input id="live_heatmap_max_stages" name="live_heatmap_max_stages" type="number" min="1" max="32" value="8"></div>
+          <div class="field"><label for="live_heatmap_min_bytes">Min. bajtów heatmap</label><input id="live_heatmap_min_bytes" name="live_heatmap_min_bytes" type="number" min="256" value="4096"></div>
+          <div class="field"><label for="source_frame_timeout_seconds">Timeout ramki [s]</label><input id="source_frame_timeout_seconds" name="source_frame_timeout_seconds" type="number" min="5" value="60"></div>
+          <div class="field"><label for="source_reconnect_attempts">Reconnect attempts</label><input id="source_reconnect_attempts" name="source_reconnect_attempts" type="number" min="0" value="5"></div>
+          <div class="field"><label for="source_reconnect_backoff_seconds">Reconnect backoff [s]</label><input id="source_reconnect_backoff_seconds" name="source_reconnect_backoff_seconds" type="number" min="0" value="2"></div>
+        </div></details></section>
+      </div>
+      <div class="actions"><button id="stopLatestBtn" type="button" class="btn danger" disabled>Zatrzymaj najnowszy aktywny</button><button id="startBtn" type="submit" class="btn primary">Uruchom test</button></div>
+    </form>
+  </div>
+</section>
+
+<section id="jobs" class="panel"><div class="panel-head"><div><h2>Zadania</h2><p>Wiele zadań dataset-y może działać równolegle i obok jednego zadania LIVE. Blokowane jest tylko drugie zadanie LIVE.</p></div></div><div class="panel-body">
+  <div class="table-scroll"><table class="jobs-table"><thead><tr><th>Start</th><th>Profil</th><th>Źródło</th><th>Status</th><th>Port</th><th>Wynik</th><th>Akcje</th></tr></thead><tbody id="jobsBody"></tbody></table></div>
+</div></section>
+
+<section id="reports" class="panel"><div class="panel-head"><div><h2>Raporty</h2><p>Gotowe i trwające kampanie.</p></div></div><div class="panel-body"><div class="table-scroll"><table class="reports-table"><thead><tr><th>Katalog</th><th>Status</th><th>Raport</th><th>Modyfikacja</th><th>Otwórz</th></tr></thead><tbody id="runsBody"></tbody></table></div></div></section>
+</main>
+<div id="logModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
+  <div class="modal-window">
+    <div class="modal-head"><h3 id="logModalTitle">Log zadania</h3><span id="logStatus" class="log-status"></span><span class="modal-spacer"></span><button class="btn mini" id="logPause" type="button">Pauza</button><button class="btn mini" id="clearLog" type="button">Wyczyść widok</button><button class="btn mini danger" id="closeLog" type="button">Zamknij</button></div>
+    <div class="modal-body"><div class="logbar"><select id="logSelect"></select><label class="check"><input id="logAutoscroll" type="checkbox" checked><span>Automatyczne przewijanie</span></label></div><pre id="log" class="log">Wybierz zadanie.</pre></div>
+  </div>
+</div>
+<script>
+const csrf={{ csrf_token|tojson }};
+const profiles={{ profiles|tojson }};
+const sourceTypes=Object.fromEntries([...document.querySelectorAll('#source_id option')].map(o=>[o.value,o.dataset.sourceType]));
+const $=id=>document.getElementById(id);let state={active:[],jobs:[],runs:[]},logJob='',logOffset=0,logOpen=false,logPaused=false;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(url,opts={}){opts.headers={...(opts.headers||{}),'X-CSRF-Token':csrf};const r=await fetch(url,opts);let d;try{d=await r.json()}catch{d={error:await r.text()}}if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
+function showError(msg){$('error').hidden=!msg;$('error').textContent=msg||''}
+function card(k,v,cls=''){return `<div class="card ${cls}"><small>${esc(k)}</small><strong>${esc(v)}</strong></div>`}
+function setValue(name,value){const f=document.querySelector(`[name="${CSS.escape(name)}"]`);if(!f)return;if(f.type==='checkbox')f.checked=Boolean(value);else f.value=String(value);f.classList.add('preset-field');f.closest('.field')?.classList.add('preset-field')}
+function clearPreset(){document.querySelectorAll('.preset-field').forEach(n=>n.classList.remove('preset-field'))}
+function currentProfile(){return profiles.find(p=>p.id===$('profile').value)}
+function applyProfile(){clearPreset();const p=currentProfile();$('profileHelp').innerHTML=`<strong>${esc(p?.label||'')}</strong><br>${esc(p?.help||'')}`;for(const [k,v] of Object.entries(p?.preset||{}))setValue(k,v);if(p?.id==='final-preproduction'){const option=[...$('source_id').options].find(item=>item.dataset.sourceType==='dataset-y');if(option){$('source_id').value=option.value;$('source_id').classList.add('preset-field');$('source_id').closest('.field')?.classList.add('preset-field')}}updateDependencies()}
+function enableGroup(selector,enabled){document.querySelectorAll(selector).forEach(node=>{node.disabled=!enabled;node.closest('.field')?.classList.toggle('disabled-block',!enabled)})}
+function updateDependencies(){
+ document.querySelectorAll('.stage.profile-locked').forEach(stage=>{stage.classList.remove('profile-locked');stage.querySelectorAll('input,select').forEach(field=>field.disabled=false)});
+ $('dataset_scope').disabled=false;$('dataset_verify_hashes').disabled=false;
+ const finalProfile=$('profile').value==='final-preproduction';
+ const sourceSelect=$('source_id');
+ [...sourceSelect.options].forEach(option=>{option.disabled=finalProfile&&option.dataset.sourceType!=='dataset-y'});
+ if(finalProfile&&sourceTypes[sourceSelect.value]!=='dataset-y'){
+   const firstDataset=[...sourceSelect.options].find(option=>option.dataset.sourceType==='dataset-y');
+   if(firstDataset)sourceSelect.value=firstDataset.value;
+ }
+ const type=sourceTypes[sourceSelect.value];const dataset=type==='dataset-y';$('datasetFields').classList.toggle('hidden',!dataset);$('exposure').disabled=dataset||type==='rtsp';$('exposureField').classList.toggle('disabled-block',$('exposure').disabled);$('warmup_seconds').disabled=dataset;$('warmup_seconds').closest('.field')?.classList.toggle('disabled-block',dataset);$('dataset_realtime').disabled=finalProfile;$('dataset_realtime').closest('.field')?.classList.toggle('disabled-block',finalProfile);
+ const verifyEnabled=dataset&&$('dataset_verify_hashes').checked;enableGroup('.verify-worker-field input',verifyEnabled);enableGroup('.final-preprod-field input',dataset&&finalProfile);
+ const scope=$('dataset_scope').value;enableGroup('.range-field input',dataset&&scope==='range');
+ const pattern=$('spatial_mask_pattern').value;enableGroup('.legacy-field select',pattern==='legacy');enableGroup('.grid-field input',pattern==='grid');enableGroup('.block-field input',pattern==='block');enableGroup('.phase-field input',pattern==='grid'||pattern==='block');
+ const tile=$('serialization_order').value==='tile-interleave';enableGroup('.tile-field input',tile);
+ const vn=Number($('von_neumann_passes').value)>0;enableGroup('.vn-field input',vn);if(!vn)$('diagnostic_vn_mib').value='0';
+ const cond=$('conditioner').value!=='none';enableGroup('.conditioner-field input',cond);if(!cond)$('conditioned_mib').value='0';
+ const campaign=['production-assessment'].includes($('profile').value);$('assessment_level').disabled=!campaign;$('assessment_level').closest('.field').classList.toggle('disabled-block',!campaign);
+ if(finalProfile)document.querySelectorAll('.stage').forEach((stage,index)=>{
+   if(index===0)return;
+   stage.classList.add('profile-locked');
+   stage.querySelectorAll('input,select').forEach(field=>field.disabled=true);
+ });
+ if(finalProfile){
+   $('dataset_scope').value='all-available';$('dataset_scope').disabled=true;$('dataset_verify_hashes').checked=true;$('dataset_verify_hashes').disabled=true;
+   $('profileHelp').innerHTML+='<br><b style="color:var(--accent2)">Stała bramka wydania: pięć wariantów, pełny snapshot datasetu i wymuszona weryfikacja zamkniętych chunków. Pola etapów 2–7 pokazują kandydata bazowego i są zablokowane.</b>';
+   if(!dataset)$('profileHelp').innerHTML+='<br><b style="color:var(--warn)">Ten profil wymaga dataset-y.</b>';
+ }
+}
+function serialize(form){const out={};for(const f of form.elements){if(!f.name||f.disabled||['submit','button'].includes(f.type))continue;if(f.type==='checkbox')out[f.name]=f.checked;else if(f.type==='number')out[f.name]=f.value===''?'':f.valueAsNumber;else out[f.name]=f.value}return out}
+async function startJob(e){e.preventDefault();showError('');try{await api('/api/jobs/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serialize(e.target))});await refresh()}catch(err){showError(err.message)}}
+async function stopJob(id){if(!confirm('Zatrzymać to zadanie i jego grupę procesów?'))return;try{await api(`/api/jobs/${id}/stop`,{method:'POST'});await refresh()}catch(err){showError(err.message)}}
+function renderJobs(rows){$('jobsBody').innerHTML=rows.map(j=>{const active=['starting','running','stopping'].includes(j.status);const folder=j.output_root?String(j.output_root).split('/').pop():'';return `<tr><td>${esc(j.created_at)}</td><td>${esc(j.profile)}</td><td>${esc((j.source||{}).label)}</td><td><span class="pill">${esc(j.status)}</span><br><small>${esc(j.message||'')}</small></td><td>${esc(j.worker_port||'—')}</td><td>${folder?`<a href="/data/${encodeURIComponent(folder)}/">${esc(folder)}</a>`:'—'}</td><td><div class="job-actions">${active?`<button class="btn mini danger" data-stop="${esc(j.id)}">Stop</button>`:''}<button class="btn mini" data-log="${esc(j.id)}">Log</button></div></td></tr>`}).join('')||'<tr><td colspan="7">Brak zadań</td></tr>';document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>stopJob(b.dataset.stop));document.querySelectorAll('[data-log]').forEach(b=>b.onclick=()=>openLog(b.dataset.log))}
+function renderRuns(rows){$('runsBody').innerHTML=rows.map(r=>`<tr><td><a href="${esc(r.url)}">${esc(r.name)}</a></td><td><span class="pill">${esc(r.status)}</span></td><td>${esc(r.report_label||'')}${r.headline?`<br><small>${esc(r.headline)}</small>`:''}</td><td>${esc(r.modified)}</td><td>${r.report?`<a href="${esc(r.report)}" target="_blank">otwórz</a>`:'—'}</td></tr>`).join('')||'<tr><td colspan="5">Brak raportów</td></tr>'}
+function updateLogOptions(jobs){const selected=logJob;$('logSelect').innerHTML='<option value="">— wybierz —</option>'+jobs.map(j=>`<option value="${esc(j.id)}">${esc(j.created_at)} · ${esc(j.profile)} · ${esc(j.status)}</option>`).join('');if(jobs.some(j=>j.id===selected))$('logSelect').value=selected}
+function openLog(id){logJob=id;logOffset=0;logOpen=true;logPaused=false;$('log').textContent='';$('logSelect').value=id;$('logModal').hidden=false;document.body.classList.add('modal-open');$('logPause').textContent='Pauza';const job=(state.jobs||[]).find(j=>j.id===id);$('logModalTitle').textContent=`Log · ${job?.profile||id}`;$('logStatus').textContent=job?`${job.status} · ${job.created_at}`:'';refreshLog()}
+function closeLog(){logOpen=false;$('logModal').hidden=true;document.body.classList.remove('modal-open')}
+function selectLog(id){if(!id)return;openLog(id)}
+async function refreshLog(){if(!logOpen||logPaused||!logJob)return;try{const d=await api(`/api/jobs/${logJob}/log?offset=${logOffset}`);if(d.text){$('log').textContent+=d.text;if($('logAutoscroll').checked)$('log').scrollTop=$('log').scrollHeight}logOffset=d.offset}catch(e){console.error(e)}}
+async function refresh(){try{const d=await api('/api/control/status');state=d;const active=d.active||[];const latest=active[0];$('statusCards').innerHTML=card('Control server','ONLINE','good')+card('Aktywne zadania',active.length,active.length?'warn':'good')+card('dataset-y',`${d.dataset_active||0}/${d.max_dataset_jobs||0}`)+card('Źródła LIVE',active.filter(j=>(j.source||{}).source_type!=='dataset-y').length)+card('Najnowszy profil',latest?.profile||'—')+card('Komunikat',latest?.message||'Gotowy');$('previewBtn').classList.toggle('disabled',!latest);$('previewBtn').href=latest?`/live?job=${encodeURIComponent(latest.id)}`:'/live';$('stopLatestBtn').disabled=!latest;$('stopLatestBtn').onclick=()=>latest&&stopJob(latest.id);renderJobs(d.jobs||[]);renderRuns(d.runs||[]);updateLogOptions(d.jobs||[]);await refreshLog();showError('')}catch(e){showError(e.message)}}
+$('startForm').addEventListener('submit',startJob);$('profile').addEventListener('change',applyProfile);['source_id','dataset_scope','dataset_verify_hashes','dataset_verify_cache','spatial_mask_pattern','serialization_order','von_neumann_passes','conditioner'].forEach(id=>$(id).addEventListener('change',updateDependencies));$('logSelect').addEventListener('change',e=>{if(e.target.value)openLog(e.target.value)});$('clearLog').onclick=()=>{$('log').textContent=''};$('closeLog').onclick=closeLog;$('logModal').addEventListener('click',e=>{if(e.target===$('logModal'))closeLog()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&logOpen)closeLog()});$('logPause').onclick=()=>{logPaused=!logPaused;$('logPause').textContent=logPaused?'Wznów':'Pauza';if(!logPaused)refreshLog()};applyProfile();refresh();setInterval(refresh,2500);
+</script>
+</body></html>

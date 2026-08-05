@@ -4,7 +4,7 @@
 
 - The USB camera agent opens the V4L2 device once and drains it continuously, even with no compute client.
 - Every TLS-Y frame carries the agent/capture start time, uptime, and `source_warmup_seconds`.
-- `frame_buffer_worker.py` records full Y8 frames or packed whole-frame LSBs into chunk files.
+- `app/sources/frame_buffer_worker.py` records full Y8 frames or packed whole-frame LSBs into chunk files.
 - `dataset-y` is a normal compute source alongside `v4l2`, `tls-y`, and `rtsp`.
 - A dataset can be processed while it is still growing.
 
@@ -26,9 +26,13 @@ The `frames.csv` row is the commit marker. A reader never guesses available byte
 
 ## Start the continuously warmed USB agent
 
+Install the Go agent on the camera host:
+
 ```bash
-DEVICE=/dev/video1 EXPOSURE=7000 CLIENT_BACKLOG_FRAMES=16 ./run_usb_agent.sh
+sudo ./agent/install.sh
 ```
+
+The installer probes `/dev/video0..2` as the service user and configures access through the `video` group and an optional udev rule. Configuration is stored in `/etc/camera-entropy/camera-agent.env`.
 
 The agent keeps no idle archive. It only creates a small bounded queue while a client is connected.
 
@@ -40,7 +44,7 @@ TLS_HOST=192.168.1.2 \
 TLS_SERVER_NAME=camera \
 FRAME_STORAGE_MODE=y8 \
 FRAME_BUFFER_LIMIT_BYTES=300000000000 \
-./run_frame_buffer.sh
+./scripts/run/run_frame_buffer.sh
 ```
 
 Default output while recording:
@@ -77,7 +81,7 @@ data/frame-buffer-latest-complete -> frame-buffer-YYYYMMDDTHHMMSSZ
 SOURCE_TYPE=tls-y \
 FRAME_STORAGE_MODE=lsb-packed \
 FRAME_BUFFER_LIMIT_BYTES=300000000000 \
-./run_frame_buffer.sh
+./scripts/run/run_frame_buffer.sh
 ```
 
 `lsb-packed` stores one bit per pixel (`np.packbits`, big bit order), so it is eight times smaller than Y8 for complete bytes. During playback it reconstructs neutral values `128` and `129`; all LSB and temporal-XOR operations remain bit-exact, while full-luminance diagnostics are not meaningful.
@@ -92,7 +96,7 @@ DATASET_DIR="$PWD/data/frame-buffer-latest" \
 DATASET_FOLLOW=1 \
 WIDTH=1280 HEIGHT=720 \
 WARMUP_SECONDS=1800 \
-./run_one.sh
+./scripts/run/run_one.sh
 ```
 
 Default behavior is:
@@ -108,13 +112,13 @@ The processor first consumes already committed frames as fast as CPU/disk allow.
 To process only the frames that are committed at the time the source reaches EOF:
 
 ```bash
-DATASET_FOLLOW=0 SOURCE_TYPE=dataset-y ./run_one.sh
+DATASET_FOLLOW=0 SOURCE_TYPE=dataset-y ./scripts/run/run_one.sh
 ```
 
 To stop after 60 seconds without a new committed frame:
 
 ```bash
-DATASET_FOLLOW_TIMEOUT_SECONDS=60 SOURCE_TYPE=dataset-y ./run_one.sh
+DATASET_FOLLOW_TIMEOUT_SECONDS=60 SOURCE_TYPE=dataset-y ./scripts/run/run_one.sh
 ```
 
 ## Recorded timing
@@ -122,19 +126,19 @@ DATASET_FOLLOW_TIMEOUT_SECONDS=60 SOURCE_TYPE=dataset-y ./run_one.sh
 By default, backlog frames are processed as fast as possible. To reproduce their original timing:
 
 ```bash
-DATASET_REALTIME=1 DATASET_RATE=1 SOURCE_TYPE=dataset-y ./run_one.sh
+DATASET_REALTIME=1 DATASET_RATE=1 SOURCE_TYPE=dataset-y ./scripts/run/run_one.sh
 ```
 
 For ten-times-faster recorded timing:
 
 ```bash
-DATASET_REALTIME=1 DATASET_RATE=10 SOURCE_TYPE=dataset-y ./run_one.sh
+DATASET_REALTIME=1 DATASET_RATE=10 SOURCE_TYPE=dataset-y ./scripts/run/run_one.sh
 ```
 
 ## SHA-256 verification
 
 ```bash
-DATASET_VERIFY_HASHES=1 SOURCE_TYPE=dataset-y ./run_one.sh
+DATASET_VERIFY_HASHES=1 SOURCE_TYPE=dataset-y ./scripts/run/run_one.sh
 ```
 
 For a completed dataset, all chunks are verified. For an active dataset, only chunks already closed by the recorder have final entries in `checksums.sha256`. The current growing chunk is safely readable through commit ordering but receives its final SHA-256 only at rollover or shutdown.

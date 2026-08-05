@@ -1,3 +1,16 @@
+# Changelog
+
+## 8.0.0 — 2026-08-05
+
+- zastąpiono Pythonowego agenta USB agentem Go z ciągłym warm-upem, CEYTLS01/mTLS i automatycznym probe `/dev/video0..2`;
+- dodano instalator agenta tworzący użytkownika systemowego, członkostwo w grupie `video`, regułę udev, konfigurację PKI oraz usługę systemd;
+- przeniesiono kod aplikacji do logicznie podzielonego pakietu `app/`;
+- przeniesiono entrypointy do `scripts/run`, kwalifikacje do `scripts/qualification`, smoke testy do `scripts/smoke`, a administrację do `scripts/admin`;
+- logi zadań w panelu są wyświetlane w pływającym oknie modalnym zamiast pod tabelą;
+- wiele zadań `dataset-y` może działać równolegle oraz współistnieć z jednym zadaniem LIVE; drugie źródło LIVE pozostaje blokowane;
+- dodano `MAX_DATASET_JOBS` i `--max-dataset-jobs`;
+- zaktualizowano unity systemd, ścieżki raportów, importy, testy i dokumentację.
+
 ## 7.14.1 — 2026-08-05
 
 - naprawiono źródło `dataset-y`, które mimo istniejącego cache zawsze wymuszało pełną ponowną weryfikację SHA-256 (`use_cache=False`);

@@ -1,0 +1,14 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.8.0.0",
+  "features": [
+    "Go camera agent with CEYTLS01/mTLS compatibility",
+    "Automatic V4L2 probe for /dev/video0, /dev/video1 and /dev/video2",
+    "Agent systemd installer with video-group and udev permission setup",
+    "Python application reorganized under app/ by responsibility",
+    "Run, qualification, smoke and administration scripts separated under scripts/",
+    "Floating web log modal",
+    "Parallel dataset-y jobs with independent worker ports",
+    "One LIVE job may coexist with read-only dataset-y jobs",
+    "Configurable MAX_DATASET_JOBS and --max-dataset-jobs"
+  ]
+}

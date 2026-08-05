@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# -*- coding: utf-8 -*-
+# Fail-closed, finite segment of the production-selected pipeline.
+# Qualification evidence is produced separately; this script does not claim certification.
+set -Eeuo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+export RUN_NAME="${RUN_NAME:-production-safe-$(date -u +%Y%m%dT%H%M%SZ)}"
+export WARMUP_SECONDS="${WARMUP_SECONDS:-1800}"
+export CALIBRATION_PAIRS="${CALIBRATION_PAIRS:-512}"
+export SAMPLE_MODE="${SAMPLE_MODE:-xor}"
+export LSB_BITS="${LSB_BITS:-1}"
+export PAIRING_MODE="${PAIRING_MODE:-disjoint}"
+export PAIR_LAG_FRAMES="${PAIR_LAG_FRAMES:-4}"
+export ENTROPY_CREDIT_BITS_PER_PIXEL="${ENTROPY_CREDIT_BITS_PER_PIXEL:-0.5}"
+export SPATIAL_SAMPLING="${SPATIAL_SAMPLING:-full}"
+export SPATIAL_MASK_PATTERN="${SPATIAL_MASK_PATTERN:-full}"
+export DIAGNOSTIC_VN_BYTES="${DIAGNOSTIC_VN_BYTES:-0}"
+export CONDITIONED_BYTES="${CONDITIONED_BYTES:-104857600}"
+export VALIDATION_BYTES="${VALIDATION_BYTES:-0}"
+export ENABLE_VON_NEUMANN="${ENABLE_VON_NEUMANN:-0}"
+export VON_NEUMANN_PASSES="${VON_NEUMANN_PASSES:-0}"
+export CONDITIONER="${CONDITIONER:-sha3-512}"
+export CONDITIONER_INPUT_BITS="${CONDITIONER_INPUT_BITS:-2048}"
+export LIVE_BYTE_DIAGNOSTICS="${LIVE_BYTE_DIAGNOSTICS:-0}"
+export MASK_SNAPSHOT_IMAGES="${MASK_SNAPSHOT_IMAGES:-0}"
+export SPATIAL_COMPARISON="${SPATIAL_COMPARISON:-0}"
+export DUAL_WEAVE_COMPARISON="${DUAL_WEAVE_COMPARISON:-0}"
+export BINARY_GEOMETRY_REPORT="${BINARY_GEOMETRY_REPORT:-0}"
+export CORRELATION_EVERY="${CORRELATION_EVERY:-50}"
+export WEB_IMAGES="${WEB_IMAGES:-0}"
+export PORT="${PORT:-8087}"
+exec "$PROJECT_ROOT/scripts/run/run_one.sh"

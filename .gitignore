@@ -9,3 +9,7 @@ sources.json
 # Lokalne PKI mTLS — nigdy nie commituj kluczy ani certyfikatów
 pki/*
 !pki/README.md
+
+# Local Go agent build/config
+agent/camera-entropy-agent
+agent/*.env

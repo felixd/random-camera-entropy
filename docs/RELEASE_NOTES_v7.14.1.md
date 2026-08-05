@@ -1,4 +1,4 @@
-# Camera Entropy Distributed 7.14.1
+# Camera Entropy Distributed 8.0.0
 
 Wydanie poprawkowe naprawiające ponowne hashowanie niezmienionych datasetów.
 
