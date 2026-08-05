@@ -50,7 +50,7 @@ from app.reporting.spatial_docs import register_documentation_routes
 from app.paths import PROJECT_ROOT, TEMPLATES_ROOT, STATIC_ROOT
 from app.control.profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.05.camera-entropy-distributed-control.8.0.0"
+APP_VERSION = "2026.08.05.camera-entropy-distributed-control.8.0.1"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -508,8 +508,16 @@ class JobManager:
                 env["FINAL_PREPROD_VERIFY_CACHE"] = env["DATASET_VERIFY_CACHE"]
             env["DATASET_REALTIME"] = "1" if payload.get("dataset_realtime", False) else "0"
         else:
-            if str(payload.get("dataset_scope", "output-limit")) not in {"", "output-limit"}:
-                raise ValueError("Zakres datasetu jest dostępny wyłącznie dla źródła dataset-y")
+            ignored_dataset_keys = sorted(
+                key for key in payload
+                if key.startswith("dataset_") or key.startswith("final_preprod_")
+            )
+            if ignored_dataset_keys:
+                self.logger.debug(
+                    "Ignoruję parametry dataset-y dla źródła LIVE %s: %s",
+                    source.get("id", source.get("source_type", "unknown")),
+                    ", ".join(ignored_dataset_keys),
+                )
 
         env["WEB_IMAGES"] = "1" if payload.get("web_images", False) else "0"
         env["MASK_SNAPSHOT_IMAGES"] = "1" if payload.get("mask_snapshot_images", False) else "0"

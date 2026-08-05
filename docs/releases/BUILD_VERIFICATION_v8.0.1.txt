@@ -1,0 +1,16 @@
+Camera Entropy Distributed 8.0.1 — build verification
+
+PASS  Python compileall for app/ and tests/
+PASS  Bash syntax for all shell scripts
+PASS  JSON parsing for all JSON files
+PASS  Jinja template parsing
+PASS  Rendered control-panel JavaScript node --check
+PASS  Go unit tests
+PASS  go vet
+PASS  static Go build with CGO_ENABLED=0
+PASS  selftest*.py: 31/31
+PASS  source-specific LIVE payload regression
+
+NOT RUN  tests/control_selftest.py — build environment has no Flask/Werkzeug.
+          Control-server environment construction and the new regression are
+          covered by selftest_source_specific_payload.py and other JobManager tests.

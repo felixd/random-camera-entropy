@@ -21,7 +21,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-APP_VERSION = "2026.08.05.camera-entropy-production-assessment.8.0.0"
+APP_VERSION = "2026.08.05.camera-entropy-production-assessment.8.0.1"
 MAX_LSB_BITS = 4
 ROOT = PROJECT_ROOT
 

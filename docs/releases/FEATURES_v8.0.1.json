@@ -1,0 +1,10 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.8.0.1",
+  "release_type": "bugfix",
+  "features": [
+    "source-aware control-panel serialization",
+    "dataset-only fields disabled for LIVE sources",
+    "defensive backend ignoring irrelevant dataset parameters",
+    "regression test for production-safe LIVE payload"
+  ]
+}

@@ -1,6 +1,6 @@
-# Camera Entropy Distributed 8.0.0
+# Camera Entropy Distributed 8.0.1
 
-System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.0 porządkuje projekt w moduły, zastępuje Pythonowego agenta kamery agentem Go i pozwala uruchamiać wiele niezależnych zadań `dataset-y` równolegle.
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.1 zachowuje modułową architekturę 8.0.0, agenta kamery w Go i równoległe zadania `dataset-y`, a dodatkowo poprawia ścisłe rozdzielenie parametrów źródeł LIVE i datasetowych.
 
 > To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 

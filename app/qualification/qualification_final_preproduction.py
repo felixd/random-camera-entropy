@@ -29,7 +29,7 @@ from app.reporting.report_ui import RawHtml, chart_div, esc, fmt, html_page, met
 from app.reporting.summarize_production_assessment import collect_case, finite, healthy
 from app.sources.dataset_integrity import default_verification_cache_path, verify_dataset_chunks
 
-APP_VERSION = "2026.08.05.camera-entropy-final-preproduction.8.0.0"
+APP_VERSION = "2026.08.05.camera-entropy-final-preproduction.8.0.1"
 ROOT = PROJECT_ROOT
 _STOP = threading.Event()
 _CHILDREN: dict[str, subprocess.Popen[str]] = {}

@@ -143,7 +143,10 @@ a{color:var(--accent)}button,input,select{font:inherit}header.top{position:stick
 const csrf={{ csrf_token|tojson }};
 const profiles={{ profiles|tojson }};
 const sourceTypes=Object.fromEntries([...document.querySelectorAll('#source_id option')].map(o=>[o.value,o.dataset.sourceType]));
-const $=id=>document.getElementById(id);let state={active:[],jobs:[],runs:[]},logJob='',logOffset=0,logOpen=false,logPaused=false;
+const $=id=>document.getElementById(id);
+const DATASET_ONLY_FIELDS=new Set(['dataset_scope','dataset_start_frame','dataset_max_frames','dataset_verify_hashes','dataset_verify_workers','dataset_verify_progress_seconds','dataset_verify_cache','dataset_realtime','dataset_follow','final_preprod_workers','final_preprod_status_interval_seconds']);
+const LIVE_ONLY_FIELDS=new Set(['exposure','warmup_seconds']);
+let state={active:[],jobs:[],runs:[]},logJob='',logOffset=0,logOpen=false,logPaused=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(url,opts={}){opts.headers={...(opts.headers||{}),'X-CSRF-Token':csrf};const r=await fetch(url,opts);let d;try{d=await r.json()}catch{d={error:await r.text()}}if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}
 function showError(msg){$('error').hidden=!msg;$('error').textContent=msg||''}
@@ -153,9 +156,9 @@ function clearPreset(){document.querySelectorAll('.preset-field').forEach(n=>n.c
 function currentProfile(){return profiles.find(p=>p.id===$('profile').value)}
 function applyProfile(){clearPreset();const p=currentProfile();$('profileHelp').innerHTML=`<strong>${esc(p?.label||'')}</strong><br>${esc(p?.help||'')}`;for(const [k,v] of Object.entries(p?.preset||{}))setValue(k,v);if(p?.id==='final-preproduction'){const option=[...$('source_id').options].find(item=>item.dataset.sourceType==='dataset-y');if(option){$('source_id').value=option.value;$('source_id').classList.add('preset-field');$('source_id').closest('.field')?.classList.add('preset-field')}}updateDependencies()}
 function enableGroup(selector,enabled){document.querySelectorAll(selector).forEach(node=>{node.disabled=!enabled;node.closest('.field')?.classList.toggle('disabled-block',!enabled)})}
+function enableContainer(id,enabled){const box=$(id);box.classList.toggle('hidden',!enabled);box.classList.toggle('disabled-block',!enabled);box.querySelectorAll('input,select,textarea,button').forEach(node=>{node.disabled=!enabled})}
 function updateDependencies(){
  document.querySelectorAll('.stage.profile-locked').forEach(stage=>{stage.classList.remove('profile-locked');stage.querySelectorAll('input,select').forEach(field=>field.disabled=false)});
- $('dataset_scope').disabled=false;$('dataset_verify_hashes').disabled=false;
  const finalProfile=$('profile').value==='final-preproduction';
  const sourceSelect=$('source_id');
  [...sourceSelect.options].forEach(option=>{option.disabled=finalProfile&&option.dataset.sourceType!=='dataset-y'});
@@ -163,7 +166,7 @@ function updateDependencies(){
    const firstDataset=[...sourceSelect.options].find(option=>option.dataset.sourceType==='dataset-y');
    if(firstDataset)sourceSelect.value=firstDataset.value;
  }
- const type=sourceTypes[sourceSelect.value];const dataset=type==='dataset-y';$('datasetFields').classList.toggle('hidden',!dataset);$('exposure').disabled=dataset||type==='rtsp';$('exposureField').classList.toggle('disabled-block',$('exposure').disabled);$('warmup_seconds').disabled=dataset;$('warmup_seconds').closest('.field')?.classList.toggle('disabled-block',dataset);$('dataset_realtime').disabled=finalProfile;$('dataset_realtime').closest('.field')?.classList.toggle('disabled-block',finalProfile);
+ const type=sourceTypes[sourceSelect.value];const dataset=type==='dataset-y';enableContainer('datasetFields',dataset);$('exposure').disabled=dataset||type==='rtsp';$('exposureField').classList.toggle('disabled-block',$('exposure').disabled);$('warmup_seconds').disabled=dataset;$('warmup_seconds').closest('.field')?.classList.toggle('disabled-block',dataset);$('dataset_realtime').disabled=!dataset||finalProfile;$('dataset_realtime').closest('.field')?.classList.toggle('disabled-block',!dataset||finalProfile);
  const verifyEnabled=dataset&&$('dataset_verify_hashes').checked;enableGroup('.verify-worker-field input',verifyEnabled);enableGroup('.final-preprod-field input',dataset&&finalProfile);
  const scope=$('dataset_scope').value;enableGroup('.range-field input',dataset&&scope==='range');
  const pattern=$('spatial_mask_pattern').value;enableGroup('.legacy-field select',pattern==='legacy');enableGroup('.grid-field input',pattern==='grid');enableGroup('.block-field input',pattern==='block');enableGroup('.phase-field input',pattern==='grid'||pattern==='block');
@@ -182,7 +185,7 @@ function updateDependencies(){
    if(!dataset)$('profileHelp').innerHTML+='<br><b style="color:var(--warn)">Ten profil wymaga dataset-y.</b>';
  }
 }
-function serialize(form){const out={};for(const f of form.elements){if(!f.name||f.disabled||['submit','button'].includes(f.type))continue;if(f.type==='checkbox')out[f.name]=f.checked;else if(f.type==='number')out[f.name]=f.value===''?'':f.valueAsNumber;else out[f.name]=f.value}return out}
+function serialize(form){const out={};const type=sourceTypes[$('source_id').value];const dataset=type==='dataset-y';for(const f of form.elements){if(!f.name||f.disabled||['submit','button'].includes(f.type))continue;if(!dataset&&DATASET_ONLY_FIELDS.has(f.name))continue;if(dataset&&LIVE_ONLY_FIELDS.has(f.name))continue;if(f.type==='checkbox')out[f.name]=f.checked;else if(f.type==='number')out[f.name]=f.value===''?'':f.valueAsNumber;else out[f.name]=f.value}return out}
 async function startJob(e){e.preventDefault();showError('');try{await api('/api/jobs/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serialize(e.target))});await refresh()}catch(err){showError(err.message)}}
 async function stopJob(id){if(!confirm('Zatrzymać to zadanie i jego grupę procesów?'))return;try{await api(`/api/jobs/${id}/stop`,{method:'POST'});await refresh()}catch(err){showError(err.message)}}
 function renderJobs(rows){$('jobsBody').innerHTML=rows.map(j=>{const active=['starting','running','stopping'].includes(j.status);const folder=j.output_root?String(j.output_root).split('/').pop():'';return `<tr><td>${esc(j.created_at)}</td><td>${esc(j.profile)}</td><td>${esc((j.source||{}).label)}</td><td><span class="pill">${esc(j.status)}</span><br><small>${esc(j.message||'')}</small></td><td>${esc(j.worker_port||'—')}</td><td>${folder?`<a href="/data/${encodeURIComponent(folder)}/">${esc(folder)}</a>`:'—'}</td><td><div class="job-actions">${active?`<button class="btn mini danger" data-stop="${esc(j.id)}">Stop</button>`:''}<button class="btn mini" data-log="${esc(j.id)}">Log</button></div></td></tr>`}).join('')||'<tr><td colspan="7">Brak zadań</td></tr>';document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>stopJob(b.dataset.stop));document.querySelectorAll('[data-log]').forEach(b=>b.onclick=()=>openLog(b.dataset.log))}

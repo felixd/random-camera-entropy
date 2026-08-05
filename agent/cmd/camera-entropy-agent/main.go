@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.0"
+	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.1"
 	protocolVersion = 1
 	protocolMagic   = "CEYTLS01"
 	maxHeaderBytes  = 64 * 1024

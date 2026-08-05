@@ -1,5 +1,12 @@
 # Changelog
 
+## 8.0.1 — 2026-08-05
+
+- panel WWW wyłącza i pomija wszystkie pola `dataset_*` oraz `final_preprod_*`, gdy wybrane źródło nie jest typu `dataset-y`;
+- formularz nie wysyła ukrytych parametrów datasetu do źródeł LIVE, nawet gdy pozostały ustawione po zmianie profilu;
+- backend defensywnie ignoruje nieistotne parametry datasetowe dla `v4l2`, `tls-y` i `rtsp` zamiast zwracać błąd HTTP 400;
+- dodano test regresyjny uruchomienia profilu produkcyjnego LIVE z payloadem zawierającym pozostałości ustawień datasetu.
+
 ## 8.0.0 — 2026-08-05
 
 - zastąpiono Pythonowego agenta USB agentem Go z ciągłym warm-upem, CEYTLS01/mTLS i automatycznym probe `/dev/video0..2`;
