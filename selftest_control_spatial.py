@@ -67,7 +67,7 @@ def main() -> int:
         'name="dataset_verify_progress_seconds"',
         'name="final_preprod_workers"',
         'name="final_preprod_status_interval_seconds"',
-        'name="final_preprod_verify_cache"',
+        'name="dataset_verify_cache"',
         'class="jobs-table"',
         'class="reports-table"',
         'name="von_neumann_passes"',

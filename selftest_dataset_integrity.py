@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 
-from dataset_integrity import load_checksum_entries, verify_dataset_chunks
+from dataset_integrity import default_verification_cache_path, load_checksum_entries, verify_dataset_chunks
 
 
 def main() -> int:
@@ -31,6 +31,8 @@ def main() -> int:
         assert len(manifest_digest) == 64
 
         snapshots: list[dict] = []
+        expected_default = dataset.parent / ".integrity-cache" / (hashlib.sha256(str(dataset.resolve()).encode("utf-8")).hexdigest()[:24] + ".json")
+        assert default_verification_cache_path(dataset) == expected_default
         cache = root / "cache" / "verified.json"
         result = verify_dataset_chunks(
             dataset,

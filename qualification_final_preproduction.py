@@ -26,9 +26,9 @@ from typing import Any
 
 from report_ui import RawHtml, chart_div, esc, fmt, html_page, metric_card, metrics_grid, rate_span, rate_unit_selector, table_html
 from summarize_production_assessment import collect_case, finite, healthy
-from dataset_integrity import verify_dataset_chunks
+from dataset_integrity import default_verification_cache_path, verify_dataset_chunks
 
-APP_VERSION = "2026.08.05.camera-entropy-final-preproduction.7.14.0"
+APP_VERSION = "2026.08.05.camera-entropy-final-preproduction.7.14.1"
 ROOT = Path(__file__).resolve().parent
 _STOP = threading.Event()
 _CHILDREN: dict[str, subprocess.Popen[str]] = {}
@@ -414,8 +414,9 @@ def main() -> int:
 
     verification: dict[str, Any]
     if args.verify_hashes:
-        cache_key = hashlib.sha256(str(dataset).encode("utf-8")).hexdigest()[:24]
-        cache_path = data_root / ".integrity-cache" / f"{cache_key}.json"
+        raw_cache_root = os.environ.get("DATASET_VERIFY_CACHE_DIR", "").strip()
+        cache_root = Path(raw_cache_root) if raw_cache_root else None
+        cache_path = default_verification_cache_path(dataset, cache_root)
         print(
             f"[final-preproduction] Rozpoczynam weryfikację zamkniętych chunków "
             f"({args.verify_workers} workerów; cache={'ON' if args.verify_cache else 'OFF'}).",

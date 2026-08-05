@@ -1,39 +1,24 @@
-Camera Entropy Distributed v7.14.0 — build verification
-========================================================
+Camera Entropy Distributed 7.14.1 build verification
+=====================================================
 
-Build date: 2026-08-05
-Version: 2026.08.05.camera-entropy-distributed.7.14.0
+Primary regression fixed
+------------------------
+- DatasetYSource now uses the shared verification cache for unchanged stopped/complete datasets.
+- Default cache path is <dataset-parent>/.integrity-cache/<sha256(resolved-dataset-path)[:24]>.json.
+- For /home/felixd/projekty/camera-entropy/data/frame-buffer-20260802T183737Z the key is 0f8140f99856008b10073448, matching the existing cache artifact.
+- Active/recording datasets do not use cached full verification.
+- Cache validity remains protected by checksum-manifest SHA-256, expected chunk hashes, sizes and mtime_ns values.
 
-Implemented fixes
------------------
-- Added the production-safe profile and run_production.sh.
-- Production defaults: temporal XOR, 1 LSB, disjoint lag 4, full frozen mask,
-  row-major, entropy credit 0.5, SHA3-512 with 2048-bit input.
-- Production diagnostics disabled: VN, validation BIN files, web/mask images,
-  live byte diagnostics, spatial comparison, Dual Weave and geometry reports.
-- Modern spatial_mask_pattern values no longer inherit or report an inactive
-  legacy checkerboard value.
-- Manifests, API and reports expose effective spatial selection separately from
-  the legacy compatibility selector.
-- Run report pipeline labels correctly handle JSON numeric 0/1, booleans and
-  textual values for the Von Neumann stage.
-- Version bumped to 7.14.0 across current executables and report generators.
-
-Verification
-------------
+Validation performed
+--------------------
 - Python compileall: PASS
-- Bash syntax for every top-level *.sh: PASS
-- JSON validation: PASS
-- Jinja template parse: PASS
-- Control-panel JavaScript syntax (node --check): PASS
-- Synthetic run report with von_neumann_stage=0: PASS
-- selftest*.py: 27/27 PASS
+- Bash syntax for all top-level scripts: PASS
+- JSON parsing for all project JSON files: PASS
+- Jinja parsing and rendered control-panel JavaScript node --check: PASS
+- selftest*.py: 28/28 PASS
+- New DatasetYSource cache integration test: first open verifies and writes cache; second open reports cache hit.
 
-Not executed
-------------
-- control_selftest.py requires Flask/Werkzeug, which are not installed in the
-  build container. Control-server configuration and UI behavior are covered by
-  selftest_control_spatial.py, selftest_final_preproduction_controls.py and
-  selftest_parallel_dataset_jobs.py.
-- No physical camera or 200+ GB production dataset was available in the build
-  container.
+Not performed
+-------------
+- No physical 195+ GB dataset was re-hashed in the build container.
+- No physical camera, mTLS agent or production systemd deployment was available.

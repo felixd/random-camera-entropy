@@ -82,11 +82,12 @@ def main() -> int:
             "dataset_verify_progress_seconds": 3,
             "final_preprod_workers": 4,
             "final_preprod_status_interval_seconds": 45,
-            "final_preprod_verify_cache": False,
+            "dataset_verify_cache": False,
         }, source, "final-preproduction", "abcd1234", 19087)
         assert env["DATASET_VERIFY_HASHES"] == "1"
         assert env["DATASET_VERIFY_WORKERS"] == "12"
         assert env["DATASET_VERIFY_PROGRESS_SECONDS"] == "3"
+        assert env["DATASET_VERIFY_CACHE"] == "0"
         assert env["FINAL_PREPROD_WORKERS"] == "4"
         assert env["FINAL_PREPROD_VERIFY_WORKERS"] == "12"
         assert env["FINAL_PREPROD_PROGRESS_INTERVAL_SECONDS"] == "3"

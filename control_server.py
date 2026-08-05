@@ -49,7 +49,7 @@ from werkzeug.security import check_password_hash
 from spatial_docs import register_documentation_routes
 from profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.05.camera-entropy-distributed-control.7.14.0"
+APP_VERSION = "2026.08.05.camera-entropy-distributed-control.7.14.1"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -98,7 +98,7 @@ PARAMETER_HELP = {
     "dataset_verify_progress_seconds": "Interwał komunikatów postępu weryfikacji integralności datasetu.",
     "final_preprod_workers": "Liczba równoległych wariantów ostatecznej kwalifikacji. Maksymalnie pięć.",
     "final_preprod_status_interval_seconds": "Interwał heartbeat kampanii podczas długiego przetwarzania całego datasetu.",
-    "final_preprod_verify_cache": "Ponownie używa pełnej weryfikacji, gdy checksum manifest, rozmiary i czasy modyfikacji chunków nie zmieniły się.",
+    "dataset_verify_cache": "Ponownie używa pełnej weryfikacji SHA-256, gdy checksum manifest, rozmiary i czasy modyfikacji chunków nie zmieniły się.",
     "runs": "Liczba przebiegów używana przez profile kwalifikacyjne.",
     "first_warmup_seconds": "Warm-up pierwszego przebiegu kampanii.",
     "next_warmup_seconds": "Warm-up kolejnych przebiegów kampanii.",
@@ -489,6 +489,10 @@ class JobManager:
             env["DATASET_START_FRAME"] = str(start_frame)
             env["DATASET_MAX_FRAMES"] = str(max_frames)
             env["DATASET_VERIFY_HASHES"] = "1" if profile == "final-preproduction" or payload.get("dataset_verify_hashes", False) else "0"
+            verify_cache = payload.get(
+                "dataset_verify_cache", payload.get("final_preprod_verify_cache", True)
+            )
+            env["DATASET_VERIFY_CACHE"] = "1" if verify_cache else "0"
             dataset_verify_workers = self._positive_int(payload, "dataset_verify_workers", 1, 64)
             dataset_verify_progress = self._positive_int(payload, "dataset_verify_progress_seconds", 1, 60)
             env["DATASET_VERIFY_WORKERS"] = str(dataset_verify_workers or int(env.get("DATASET_VERIFY_WORKERS", "1")))
@@ -500,7 +504,7 @@ class JobManager:
                 env["FINAL_PREPROD_VERIFY_WORKERS"] = env["DATASET_VERIFY_WORKERS"]
                 env["FINAL_PREPROD_PROGRESS_INTERVAL_SECONDS"] = env["DATASET_VERIFY_PROGRESS_SECONDS"]
                 env["FINAL_PREPROD_STATUS_INTERVAL_SECONDS"] = str(final_status_interval or 30)
-                env["FINAL_PREPROD_VERIFY_CACHE"] = "1" if payload.get("final_preprod_verify_cache", True) else "0"
+                env["FINAL_PREPROD_VERIFY_CACHE"] = env["DATASET_VERIFY_CACHE"]
             env["DATASET_REALTIME"] = "1" if payload.get("dataset_realtime", False) else "0"
         else:
             if str(payload.get("dataset_scope", "output-limit")) not in {"", "output-limit"}:

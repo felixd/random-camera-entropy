@@ -294,6 +294,8 @@ PY
         )
         if [[ "${DATASET_REALTIME:-0}" == 1 ]]; then source_args+=(--dataset-realtime); else source_args+=(--no-dataset-realtime); fi
         if [[ "${DATASET_VERIFY_HASHES:-0}" == 1 ]]; then source_args+=(--dataset-verify-hashes); fi
+        if [[ "${DATASET_VERIFY_CACHE:-1}" == 1 ]]; then source_args+=(--dataset-verify-cache); else source_args+=(--no-dataset-verify-cache); fi
+        if [[ -n "${DATASET_VERIFY_CACHE_DIR:-}" ]]; then source_args+=(--dataset-verify-cache-dir "$DATASET_VERIFY_CACHE_DIR"); fi
         if [[ "${DATASET_FOLLOW:-1}" == 1 ]]; then source_args+=(--dataset-follow); else source_args+=(--no-dataset-follow); fi
         source_label="dataset-y://$DATASET_DIR"
         ;;

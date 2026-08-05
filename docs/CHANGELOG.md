@@ -1,11 +1,19 @@
+## 7.14.1 — 2026-08-05
+
+- naprawiono źródło `dataset-y`, które mimo istniejącego cache zawsze wymuszało pełną ponowną weryfikację SHA-256 (`use_cache=False`);
+- zwykłe przebiegi, profil produkcyjny i kwalifikacja przedprodukcyjna używają teraz wspólnego pliku `data/.integrity-cache/<dataset-key>.json`;
+- cache jest używany wyłącznie dla niezmienionego, nieaktywnego datasetu i nadal wymaga identycznego manifestu checksum, oczekiwanych hashy, rozmiarów oraz `mtime_ns` wszystkich chunków;
+- dodano `--dataset-verify-cache`, `--no-dataset-verify-cache` i `--dataset-verify-cache-dir`;
+- panel WWW udostępnia cache dla każdego przebiegu `dataset-y`, nie tylko profilu final-preproduction;
+- dodano test integracyjny potwierdzający cache miss przy pierwszym otwarciu i cache hit przy drugim.
+
 ## 7.14.0 — 2026-08-05
 
 - dodano zatwierdzony profil produkcyjny XOR/1 LSB, disjoint lag 4, pełna maska, SHA3-512/2048, credit 0,5;
 - usunięto semantyczną niespójność `checkerboard-even` kontra faktyczna pełna maska;
 - raport pipeline'u poprawnie obsługuje numeryczne `0/1` dla etapu Von Neumanna;
 - manifesty i API raportują efektywną selekcję przestrzenną oraz osobno wartość legacy;
-- produkcyjny skrypt wyłącza kosztowną diagnostykę i pliki walidacyjne;
-- wersja podbita do `2026.08.05.camera-entropy-distributed.7.14.0`.
+- produkcyjny skrypt wyłącza kosztowną diagnostykę i pliki walidacyjne.
 
 ## 7.13.0 — 2026-08-04
 

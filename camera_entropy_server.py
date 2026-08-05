@@ -72,7 +72,7 @@ from masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelMonitor
 from entropy_extractors import repeated_von_neumann, von_neumann_split
 from stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.05.camera-entropy-distributed.7.14.0"
+APP_VERSION = "2026.08.05.camera-entropy-distributed.7.14.1"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -4378,6 +4378,17 @@ def parse_args() -> argparse.Namespace:
         help="Verify SHA-256 of chunks already closed by the dataset recorder",
     )
     parser.add_argument(
+        "--dataset-verify-cache",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reuse a completed SHA-256 verification when the stopped dataset fingerprint is unchanged",
+    )
+    parser.add_argument(
+        "--dataset-verify-cache-dir",
+        type=Path,
+        help="Optional cache directory; default is .integrity-cache next to the dataset directory",
+    )
+    parser.add_argument(
         "--dataset-verify-workers",
         type=int,
         default=1,
@@ -4737,6 +4748,8 @@ def parse_args() -> argparse.Namespace:
         if not args.dataset_dir:
             parser.error("dataset-y source requires --dataset-dir")
         args.dataset_dir = args.dataset_dir.expanduser().resolve()
+        if args.dataset_verify_cache_dir is not None:
+            args.dataset_verify_cache_dir = args.dataset_verify_cache_dir.expanduser().resolve()
         if not (args.dataset_dir / "manifest.json").is_file():
             parser.error(f"dataset manifest not found: {args.dataset_dir / 'manifest.json'}")
         if args.dataset_start_frame < 0:

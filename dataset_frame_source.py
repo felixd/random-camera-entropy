@@ -13,7 +13,7 @@ from typing import Any, BinaryIO, Optional, TextIO
 import numpy as np
 
 from frame_sources import FrameSource, SourceFrame
-from dataset_integrity import verify_dataset_chunks
+from dataset_integrity import default_verification_cache_path, verify_dataset_chunks
 
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 SUPPORTED_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -58,8 +58,14 @@ class DatasetYSource(FrameSource):
         self.realtime = bool(getattr(args, "dataset_realtime", False))
         self.rate = float(getattr(args, "dataset_rate", 1.0))
         self.verify_hashes = bool(getattr(args, "dataset_verify_hashes", False))
+        self.verify_cache = bool(getattr(args, "dataset_verify_cache", True))
+        raw_cache_dir = getattr(args, "dataset_verify_cache_dir", None)
+        self.verify_cache_dir = (
+            Path(raw_cache_dir).expanduser().resolve() if raw_cache_dir else None
+        )
         self.verify_workers = int(getattr(args, "dataset_verify_workers", 1))
         self.verify_progress_seconds = float(getattr(args, "dataset_verify_progress_seconds", 2.0))
+        self.verification_result: dict[str, Any] | None = None
         self.follow = bool(getattr(args, "dataset_follow", True))
         self.poll_seconds = float(getattr(args, "dataset_poll_seconds", 0.10))
         self.follow_timeout_seconds = float(
@@ -132,18 +138,31 @@ class DatasetYSource(FrameSource):
                 "—" if item.get("eta_seconds") is None else f"{float(item['eta_seconds']):.1f}s",
             )
 
+        active = self._can_grow()
+        cache_path = default_verification_cache_path(
+            self.dataset_dir, self.verify_cache_dir,
+        )
+        use_cache = self.verify_cache and not active
+        self.logger.info(
+            "dataset SHA-256 cache: enabled=%s usable=%s path=%s",
+            self.verify_cache, use_cache, cache_path,
+        )
         result = verify_dataset_chunks(
             self.dataset_dir,
             workers=self.verify_workers,
             progress_interval_seconds=self.verify_progress_seconds,
             progress_callback=progress,
-            allow_incomplete_last_line=self._can_grow(),
-            use_cache=False,
+            allow_incomplete_last_line=active,
+            cache_path=cache_path,
+            use_cache=use_cache,
         )
+        self.verification_result = dict(result)
+        self.verification_result["cache_path"] = str(cache_path)
         self.logger.info(
-            "dataset SHA-256 verification complete: chunks=%s bytes=%s workers=%s elapsed=%.3fs",
+            "dataset SHA-256 verification complete: chunks=%s bytes=%s workers=%s elapsed=%.3fs cached=%s",
             result.get("closed_chunks", 0), result.get("bytes", 0),
             result.get("workers", self.verify_workers), float(result.get("elapsed_seconds", 0.0) or 0.0),
+            bool(result.get("cached", False)),
         )
 
     def open(self) -> None:
@@ -399,6 +418,7 @@ class DatasetYSource(FrameSource):
             "playback_rate": self.rate,
             "has_full_luma": self.has_full_luma,
             "original_source": self.dataset_manifest.get("source"),
+            "dataset_verification": self.verification_result,
             "warning": (
                 None
                 if self.has_full_luma

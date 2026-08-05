@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any, Callable
 
-APP_VERSION = "2026.08.05.camera-entropy-dataset-integrity.7.14.0"
+APP_VERSION = "2026.08.05.camera-entropy-dataset-integrity.7.14.1"
 DEFAULT_BLOCK_BYTES = 8 * 1024 * 1024
 
 
@@ -90,6 +90,20 @@ def load_checksum_entries(
     if not entries:
         raise RuntimeError("checksums.sha256 does not contain any closed chunk")
     return entries, manifest_digest
+
+
+def default_verification_cache_path(dataset: Path, cache_root: Path | None = None) -> Path:
+    """Return the stable cache file shared by replay and qualification paths.
+
+    The key depends only on the resolved dataset path.  Cache validity itself is
+    still guarded by the full fingerprint (checksum manifest digest, expected
+    hashes, file sizes and nanosecond mtimes), so a changed dataset never reuses
+    stale verification evidence.
+    """
+    dataset = dataset.expanduser().resolve()
+    root = cache_root.expanduser().resolve() if cache_root is not None else dataset.parent / ".integrity-cache"
+    key = hashlib.sha256(str(dataset).encode("utf-8")).hexdigest()[:24]
+    return root / f"{key}.json"
 
 
 def verification_fingerprint(dataset: Path, entries: list[ChunkChecksum], manifest_digest: str) -> dict[str, Any]:

@@ -1,7 +1,7 @@
-# Camera Entropy Distributed v7.14.0
+# Camera Entropy Distributed v7.14.1
 
 
-## Produkcyjna spójność maski i raportów v7.14.0
+## Produkcyjna spójność maski i raportów v7.14.1
 
 - nowy profil i skrypt `run_production.sh`: `PRODUCTION FINAL — XOR 1 LSB / SHA3-512`;
 - pełna maska jest jednoznacznym ustawieniem domyślnym, a historyczne `spatial_sampling` działa wyłącznie z `spatial_mask_pattern=legacy`;
@@ -886,3 +886,7 @@ Pełne kampanie:
 `GLOBAL_CONTINUE_ON_ERROR=1` jest ustawieniem domyślnym: po błędzie uruchamiane są kolejne profile, ale końcowy kod wyjścia pozostaje niezerowy. Każdy przebieg zapisuje `lsb_bitplane_report.html`; kampanie tworzą `lsb_campaign_report.html` oraz `global_campaign_report.html`.
 
 Raport kampanii LSB porównuje również przepustowość surowego i maskowanego wejścia, czas osiągnięcia celu SHA3 oraz przepustowość wyjścia conditionera. Raport geometrii binarnej zawiera wyłącznie histogram bajtów, macierz przejść 2D i mapę reszt Pearsona — bez wykresów 3D.
+
+## Cache weryfikacji datasetu
+
+Przy `DATASET_VERIFY_HASHES=1` niezmieniony zatrzymany dataset korzysta domyślnie z audytowalnego cache w `data/.integrity-cache/`. Pełne hashowanie jest powtarzane automatycznie po zmianie manifestu checksum, listy chunków, rozmiaru lub czasu modyfikacji któregokolwiek chunku. Świeżą weryfikację można wymusić przez `DATASET_VERIFY_CACHE=0`.
