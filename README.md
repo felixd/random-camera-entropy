@@ -1,5 +1,13 @@
-# Camera Entropy Distributed v7.13.0
+# Camera Entropy Distributed v7.14.0
 
+
+## Produkcyjna spójność maski i raportów v7.14.0
+
+- nowy profil i skrypt `run_production.sh`: `PRODUCTION FINAL — XOR 1 LSB / SHA3-512`;
+- pełna maska jest jednoznacznym ustawieniem domyślnym, a historyczne `spatial_sampling` działa wyłącznie z `spatial_mask_pattern=legacy`;
+- manifesty, API i raporty pokazują efektywną selekcję przestrzenną zamiast nieaktywnej wartości legacy;
+- opis pipeline'u uwzględnia rzeczywistą liczbę przejść Von Neumanna i nie pokazuje VN, gdy etap jest wyłączony;
+- profil produkcyjny wyłącza pliki walidacyjne, VN, podglądy, heatmapy, Dual Weave i pozostałą kosztowną diagnostykę.
 
 ## Weryfikacja datasetu i czytelność panelu v7.13.0
 

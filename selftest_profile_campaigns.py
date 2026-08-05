@@ -23,11 +23,12 @@ def main() -> int:
     # The final preproduction profile intentionally consumes an entire dataset and
     # is a separate release gate.  It must not be hidden inside the historical
     # global campaign, which remains a bounded collection of smoke/qualification runs.
-    global_exclusions = {"global-all", "final-preproduction"}
+    global_exclusions = {"global-all", "final-preproduction", "production-safe"}
     expected = {name: script for name, script in profiles.items() if name not in global_exclusions}
     assert global_steps == expected, (global_steps.keys(), expected.keys())
     assert len(global_steps) == 23
     assert profiles["final-preproduction"] == "qualification_final_preproduction.py"
+    assert profiles["production-safe"] == "run_production.sh"
 
     for script in profiles.values():
         path = ROOT / script

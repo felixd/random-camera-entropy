@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any, Callable
 
-APP_VERSION = "2026.08.04.camera-entropy-dataset-integrity.7.13.0"
+APP_VERSION = "2026.08.05.camera-entropy-dataset-integrity.7.14.0"
 DEFAULT_BLOCK_BYTES = 8 * 1024 * 1024
 
 

@@ -53,6 +53,7 @@ from frame_sources import FrameSource, create_frame_source, redact_url
 from spatial_sampling import (
     align_previous_frame,
     build_pattern_set,
+    effective_spatial_selection,
     SpatialSerializer,
     spatial_xor_lsb,
 )
@@ -71,7 +72,7 @@ from masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelMonitor
 from entropy_extractors import repeated_von_neumann, von_neumann_split
 from stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.04.camera-entropy-distributed.7.13.0"
+APP_VERSION = "2026.08.05.camera-entropy-distributed.7.14.0"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -155,6 +156,7 @@ SPATIAL_COMPARISON_VARIANTS = (
 
 
 def canonical_spatial_sampling(name: str) -> str:
+    # Backwards-compatible wrapper; the implementation lives in spatial_sampling.py.
     return "checkerboard-even" if name == "checkerboard" else name
 
 def entropy_pipeline_name(args: argparse.Namespace) -> str:
@@ -2295,6 +2297,9 @@ class Service:
                 except Exception:
                     pass
 
+    def spatial_selection_status(self) -> dict[str, object]:
+        return effective_spatial_selection(self.args)
+
     def build_spatial_patterns(self, shape: tuple[int, int]) -> dict[str, np.ndarray]:
         if self.spatial_pattern_cache and next(iter(self.spatial_pattern_cache.values())).shape == shape:
             return self.spatial_pattern_cache
@@ -2379,7 +2384,8 @@ class Service:
     def active_clipping_status(self) -> dict[str, Any]:
         return {
             "scope": "multi-scope" if self.args.dual_weave_comparison else "production_sampling_mask",
-            "sampling": self.args.spatial_sampling,
+            "sampling": self.spatial_selection_status()["effective"],
+            "selection": self.spatial_selection_status(),
             "enforced_scopes": list(self.clip_enforced_scopes),
             "production_pixels": self.production_active_pixels,
             "pixels": self.active_clip_pixels,
@@ -2547,7 +2553,9 @@ class Service:
                 "entropy_credit_bits_per_pixel": self.args.entropy_credit_bits_per_pixel,
                 "minimum_conditioner_input_bits": self.args.minimum_conditioner_input_bits,
                 "mask_calibration_source": "temporal-xor-lsb0",
-                "spatial_sampling": self.args.spatial_sampling,
+                "spatial_sampling": self.spatial_selection_status()["effective"],
+                "spatial_sampling_legacy": self.args.spatial_sampling,
+                "spatial_selection": self.spatial_selection_status(),
                 "spatial_mask_pattern": self.args.spatial_mask_pattern,
                 "spatial_step": [self.args.spatial_step_x, self.args.spatial_step_y],
                 "spatial_phase": [self.args.spatial_phase_x, self.args.spatial_phase_y],
@@ -2580,7 +2588,9 @@ class Service:
             "pairing_mode": self.args.pairing_mode,
             "pair_lag_frames": self.args.pair_lag_frames,
             "spatial_mask_pattern": self.args.spatial_mask_pattern,
-            "spatial_sampling": self.args.spatial_sampling,
+            "spatial_sampling": self.spatial_selection_status()["effective"],
+            "spatial_sampling_legacy": self.args.spatial_sampling,
+            "spatial_selection": self.spatial_selection_status(),
             "serialization_order": self.args.serialization_order,
         })
         self.stream_lsb_summary_path.write_text(
@@ -2624,7 +2634,9 @@ class Service:
             "written_output_bytes": self.bit_writer.written_bytes,
             "accepted_output_bits": self.bit_writer.accepted_bits,
             "pending_bits": int(self.bit_writer.pending.size),
-            "spatial_sampling": self.args.spatial_sampling,
+            "spatial_sampling": self.spatial_selection_status()["effective"],
+            "spatial_sampling_legacy": self.args.spatial_sampling,
+            "spatial_selection": self.spatial_selection_status(),
             "spatial_mask_pattern": self.args.spatial_mask_pattern,
             "spatial_step": [self.args.spatial_step_x, self.args.spatial_step_y],
             "spatial_phase": [self.args.spatial_phase_x, self.args.spatial_phase_y],
@@ -2731,7 +2743,10 @@ class Service:
             "target_output_bytes": self.args.max_output_bytes,
             "written_output_bytes": self.bit_writer.written_bytes,
             "accepted_output_bits": self.bit_writer.accepted_bits,
-            "spatial_sampling": self.args.spatial_sampling,
+            "spatial_sampling": self.spatial_selection_status()["effective"],
+            "spatial_sampling_legacy": self.args.spatial_sampling,
+            "spatial_selection": self.spatial_selection_status(),
+            "spatial_mask_pattern": self.args.spatial_mask_pattern,
             "pipeline": entropy_pipeline_name(self.args),
             "sample_mode": self.args.sample_mode,
             "lsb_bits": self.args.lsb_bits,
@@ -3013,7 +3028,9 @@ class Service:
                     "pixels": int(self.calibrator.mask.sum()) if self.calibrator and self.calibrator.mask is not None else 0,
                     "production_pixels": int(np.count_nonzero(self.production_mask(self.calibrator.mask)))
                     if self.calibrator and self.calibrator.mask is not None else 0,
-                    "spatial_sampling": self.args.spatial_sampling,
+                    "spatial_sampling": self.spatial_selection_status()["effective"],
+                    "spatial_sampling_legacy": self.args.spatial_sampling,
+                    "spatial_selection": self.spatial_selection_status(),
                     "spatial_mask_pattern": self.args.spatial_mask_pattern,
                     "serialization_order": self.args.serialization_order,
                     "offset": [
@@ -3061,7 +3078,9 @@ class Service:
             "von_neumann_passes": self.args.von_neumann_passes,
                     "pairing_mode": self.args.pairing_mode,
                     "pair_lag_frames": self.args.pair_lag_frames,
-                    "spatial_sampling": self.args.spatial_sampling,
+                    "spatial_sampling": self.spatial_selection_status()["effective"],
+                    "spatial_sampling_legacy": self.args.spatial_sampling,
+                    "spatial_selection": self.spatial_selection_status(),
                     "spatial_mask_pattern": self.args.spatial_mask_pattern,
                     "spatial_step_x": self.args.spatial_step_x,
                     "spatial_step_y": self.args.spatial_step_y,
@@ -3341,7 +3360,9 @@ class Service:
             "rejected_transition": int(np.count_nonzero(reasons & 2)),
             "rejected_clipping": int(np.count_nonzero(reasons & 4)),
             "pairing": self.pairing_status(),
-            "spatial_sampling": self.args.spatial_sampling,
+            "spatial_sampling": self.spatial_selection_status()["effective"],
+            "spatial_sampling_legacy": self.args.spatial_sampling,
+            "spatial_selection": self.spatial_selection_status(),
             "production_pixels": int(np.count_nonzero(production_mask)) if production_mask is not None else 0,
             "dynamic_clip_filter": self.args.dynamic_clip_filter,
             "max_active_clip_rate": self.args.max_active_clip_rate,
@@ -4118,7 +4139,7 @@ let heatmapSequence=-1;
 function renderByteDiagnostics(data){lastByteDiagnostics=data;const stages=(data.stages||[]).slice().sort((a,b)=>(a.rank-b.rank)||String(a.label).localeCompare(String(b.label)));const main=stages.filter(s=>s.group==='main'&&Number(s.total_bytes)>0),direct=main.filter(s=>s.key==='direct_lsb'),mainCore=main.filter(s=>s.key!=='direct_lsb'),dual=stages.filter(s=>s.group==='dual'&&Number(s.total_bytes)>0);drawByteGroup(mainCore,'byteHistogramMain','Odchylenia rozkładu bajtów po etapach czyszczenia');byId('directHistogramPanel').hidden=!direct.length;if(direct.length)drawByteGroup(direct,'byteHistogramDirect','Direct LSB — aktywna maska');byId('byteStageCards').innerHTML=main.map(s=>card(s.label,`${n(s.total_bytes)} B`,`H=${f(s.byte_entropy_bits,6)} · Hmin=${f(s.byte_min_entropy_bits,6)} · mean=${f(s.byte_mean,4)}`)).join('');byId('dualHistogramPanel').hidden=!dual.length;if(dual.length)drawByteGroup(dual,'byteHistogramDual','Dual weave — odchylenia rozkładów bajtów');const hm=data.heatmap||{};if(hm.file&&Number(hm.sequence)!==heatmapSequence){heatmapSequence=Number(hm.sequence);byId('liveHeatmap').src=`/live_byte_heatmaps.png?t=${Date.now()}`}byId('heatmapInfo').textContent=hm.file?`Sekwencja ${hm.sequence} · wygenerowano ${hm.last_generated_utc||'n/a'} · interwał ${hm.interval_seconds}s · maks. ${hm.max_stages} etapów`:`Oczekiwanie: minimum ${n(hm.minimum_bytes_per_stage)} B na etap · interwał ${hm.interval_seconds}s${hm.rendering?' · generowanie w toku':''}`}
 function drawDrift(history,settings){const rows=(history||[]).slice(-720).filter(p=>Number.isFinite(Number(p.active_retention))&&Number.isFinite(Number(p.jaccard)));if(!window.Plotly)return;if(!rows.length){Plotly.purge(byId('driftChart'));byId('driftInfo').textContent='Oczekiwanie na pierwszy punkt dryftu.';return}const x=rows.map((p,i)=>p.timestamp_utc||i),ret=rows.map(p=>100*Number(p.active_retention)),jac=rows.map(p=>100*Number(p.jaccard)),rt=100*Number(settings.shadow_min_active_retention||.95),jt=100*Number(settings.shadow_min_jaccard||.90);const traces=[{type:'scatter',mode:'lines+markers',name:'Retencja aktywnej',x,y:ret,line:{width:2},marker:{size:4},hovertemplate:'%{x}<br>retencja=%{y:.5f}%<extra></extra>'},{type:'scatter',mode:'lines+markers',name:'Jaccard',x,y:jac,line:{width:2},marker:{size:4},hovertemplate:'%{x}<br>Jaccard=%{y:.5f}%<extra></extra>'}];const allValues=[...ret,...jac,rt,jt].filter(v=>Number.isFinite(Number(v))).map(Number);const low=Math.min(...allValues),high=Math.max(...allValues),span=Math.max(0.05,high-low),pad=Math.max(0.05,span*0.12);let y0=Math.max(0,low-pad),y1=Math.min(100,high+pad);if(y1-y0<0.6){const mid=(y0+y1)/2;y0=Math.max(0,mid-0.3);y1=Math.min(100,mid+0.3)}const layout=darkLayout('Retencja aktywnej maski i indeks Jaccarda','[%]');layout.xaxis={title:'Czas / zapis',gridcolor:'#303846'};layout.yaxis={title:'[%]',range:[y0,y1],gridcolor:'#303846'};layout.shapes=[{type:'line',xref:'paper',x0:0,x1:1,y0:rt,y1:rt,line:{dash:'dash',width:1}},{type:'line',xref:'paper',x0:0,x1:1,y0:jt,y1:jt,line:{dash:'dot',width:1}}];safePlotlyReact(byId('driftChart'),traces,layout);const last=rows[rows.length-1];byId('driftInfo').textContent=`Punkty: ${rows.length} · ostatni: ${last.timestamp_utc||'n/a'} · retencja ${f(100*last.active_retention,4)}% · Jaccard ${f(100*last.jaccard,4)}% · bad streak ${n(last.bad_streak)} · zakres osi ${f(y0,3)}…${f(y1,3)}%`}
 __IMAGE_JS__
-async function updateStats(){try{const s=await fetchJson('/api/stats'),l=s.last||{},c=s.calibration||{},h=s.health||{},m=s.shadow_mask||{},a=s.active_mask||{},r=s.rates||{},ctrl=s.camera_controls||{},out=s.output_limit||{},w=s.warmup||{},p=s.pairing||{},dw=s.dual_weave||{},ac=s.active_clipping||{},st=s.source_transport||{};byId('apiError').style.display='none';byId('device').textContent=`${s.device||''} · ${s.mode.fourcc||''} ${s.mode.width||0}×${s.mode.height||0} · ${s.app_version}`;renderStateHeader(s);byId('cards').innerHTML=card('Tryb parowania',`${p.mode||'n/a'} / k=${n(p.lag_frames)}`,`bufor ${n(p.buffered_frames)}/${n(p.conceptual_buffer_frames)} · ${p.phase||''}`)+card('Transport źródła',`gen ${n(st.connection_generation)} · reconnect ${n(st.reconnect_count)}`,`timeout ${n(st.frame_timeout_seconds)} s`)+card('Próbkowanie',`${(s.settings||{}).spatial_sampling||'n/a'}`)+card('Dual weave',dw.enabled?`${dw.group_sequence||0} grup · ${dw.complete?'COMPLETE':'RUNNING'}`:'wyłączony')+card('Clipping full',f((((ac.scopes||{}).full||{}).rate)),`limit ${f(ac.limit)}`)+card('Clipping even',f((((ac.scopes||{}).even||{}).rate)))+card('Clipping odd',f((((ac.scopes||{}).odd||{}).rate)))+card('Kalibracja',`${n(c.pairs)} / ${n(c.target)}`,c.ready?'zamrożona':'zbieranie')+card('Maska produkcyjna',n(a.production_pixels||m.active_pixels||a.pixels))+card('Shadow maska',n(m.shadow_pixels))+card('Retencja',f(m.active_retention))+card('Jaccard',f(m.jaccard))+card('Niezgodność',f(m.disagreement_rate))+card('P(1) RAW',f(l.raw_change_p1))+card('P(1) po masce',f(l.masked_p1))+card('Von Neumann',(s.settings||{}).von_neumann_stage?n(l.vn_output_bits):'wyłączony',(s.settings||{}).von_neumann_stage?`wydajność ${f(l.vn_efficiency)}`:'temporal SHA3')+card('SHA3',`${n((s.conditioner||{}).written_bytes)} B`,rate((s.conditioner||{}).output_bps_lifetime))+card('RCT/APT',h.latched?'FAIL':'OK',h.last_failure||'')+card('Ekspozycja',n((ctrl.after_open||{}).exposure_time_absolute))+card('Warm-up',w.complete?'zakończony':duration(w.remaining_seconds))+card('Cel danych',out.target_bytes?`${f(100*(out.written_bytes||0)/out.target_bytes,3)}%`:'bez limitu');byId('rateCards').innerHTML=card('Bieżąca',rate(r.output_bps_current))+card('EMA 10 s',rate(r.output_bps_ema_10s))+card('1 s',rate(r.output_bps_1s))+card('10 s',rate(r.output_bps_10s))+card('60 s',rate(r.output_bps_60s))+card('Średnia',rate(r.output_bps_lifetime),duration(r.production_uptime_seconds))+card('RAW 10 s',rate(r.raw_change_bps_10s))+card('Po masce 10 s',rate(r.masked_bps_10s))+card('Packed 10 s',`${f(r.packed_bytes_per_second_10s,2)} B/s`)+card('Zapisano',`${n(r.total_written_bytes)} B`);byId('commandLine').textContent=s.command_line||'';document.querySelector('#parameters tbody').innerHTML=(s.startup_parameters||[]).map(p=>`<tr><td><code>${esc(p.options)}</code><br><small>${esc(p.destination)}</small></td><td><code>${esc(p.value)}</code></td><td><code>${esc(p.default)}</code></td><td><span class="tag">${esc(p.source)}</span></td></tr>`).join('');byId('files').innerHTML=Object.entries(s.files||{}).filter(([,v])=>v).map(([k,v])=>`<a href="/download/${encodeURIComponent(v)}">${esc(k)}: ${esc(v)}</a>`).join(' · ');drawDrift(s.mask_drift_history||[],s.settings||{});refreshImages(w)}catch(error){console.error(error);renderStateHeader({state:'API ERROR',error:error.message});const box=byId('apiError');box.textContent=error.message;box.style.display='block'}}
+async function updateStats(){try{const s=await fetchJson('/api/stats'),l=s.last||{},c=s.calibration||{},h=s.health||{},m=s.shadow_mask||{},a=s.active_mask||{},r=s.rates||{},ctrl=s.camera_controls||{},out=s.output_limit||{},w=s.warmup||{},p=s.pairing||{},dw=s.dual_weave||{},ac=s.active_clipping||{},st=s.source_transport||{};byId('apiError').style.display='none';byId('device').textContent=`${s.device||''} · ${s.mode.fourcc||''} ${s.mode.width||0}×${s.mode.height||0} · ${s.app_version}`;renderStateHeader(s);byId('cards').innerHTML=card('Tryb parowania',`${p.mode||'n/a'} / k=${n(p.lag_frames)}`,`bufor ${n(p.buffered_frames)}/${n(p.conceptual_buffer_frames)} · ${p.phase||''}`)+card('Transport źródła',`gen ${n(st.connection_generation)} · reconnect ${n(st.reconnect_count)}`,`timeout ${n(st.frame_timeout_seconds)} s`)+card('Selekcja przestrzenna',`${(((s.settings||{}).spatial_selection||{}).label)||((s.settings||{}).spatial_sampling)||'n/a'}`)+card('Dual weave',dw.enabled?`${dw.group_sequence||0} grup · ${dw.complete?'COMPLETE':'RUNNING'}`:'wyłączony')+card('Clipping full',f((((ac.scopes||{}).full||{}).rate)),`limit ${f(ac.limit)}`)+card('Clipping even',f((((ac.scopes||{}).even||{}).rate)))+card('Clipping odd',f((((ac.scopes||{}).odd||{}).rate)))+card('Kalibracja',`${n(c.pairs)} / ${n(c.target)}`,c.ready?'zamrożona':'zbieranie')+card('Maska produkcyjna',n(a.production_pixels||m.active_pixels||a.pixels))+card('Shadow maska',n(m.shadow_pixels))+card('Retencja',f(m.active_retention))+card('Jaccard',f(m.jaccard))+card('Niezgodność',f(m.disagreement_rate))+card('P(1) RAW',f(l.raw_change_p1))+card('P(1) po masce',f(l.masked_p1))+card('Von Neumann',(s.settings||{}).von_neumann_stage?n(l.vn_output_bits):'wyłączony',(s.settings||{}).von_neumann_stage?`wydajność ${f(l.vn_efficiency)}`:'temporal SHA3')+card('SHA3',`${n((s.conditioner||{}).written_bytes)} B`,rate((s.conditioner||{}).output_bps_lifetime))+card('RCT/APT',h.latched?'FAIL':'OK',h.last_failure||'')+card('Ekspozycja',n((ctrl.after_open||{}).exposure_time_absolute))+card('Warm-up',w.complete?'zakończony':duration(w.remaining_seconds))+card('Cel danych',out.target_bytes?`${f(100*(out.written_bytes||0)/out.target_bytes,3)}%`:'bez limitu');byId('rateCards').innerHTML=card('Bieżąca',rate(r.output_bps_current))+card('EMA 10 s',rate(r.output_bps_ema_10s))+card('1 s',rate(r.output_bps_1s))+card('10 s',rate(r.output_bps_10s))+card('60 s',rate(r.output_bps_60s))+card('Średnia',rate(r.output_bps_lifetime),duration(r.production_uptime_seconds))+card('RAW 10 s',rate(r.raw_change_bps_10s))+card('Po masce 10 s',rate(r.masked_bps_10s))+card('Packed 10 s',`${f(r.packed_bytes_per_second_10s,2)} B/s`)+card('Zapisano',`${n(r.total_written_bytes)} B`);byId('commandLine').textContent=s.command_line||'';document.querySelector('#parameters tbody').innerHTML=(s.startup_parameters||[]).map(p=>`<tr><td><code>${esc(p.options)}</code><br><small>${esc(p.destination)}</small></td><td><code>${esc(p.value)}</code></td><td><code>${esc(p.default)}</code></td><td><span class="tag">${esc(p.source)}</span></td></tr>`).join('');byId('files').innerHTML=Object.entries(s.files||{}).filter(([,v])=>v).map(([k,v])=>`<a href="/download/${encodeURIComponent(v)}">${esc(k)}: ${esc(v)}</a>`).join(' · ');drawDrift(s.mask_drift_history||[],s.settings||{});refreshImages(w)}catch(error){console.error(error);renderStateHeader({state:'API ERROR',error:error.message});const box=byId('apiError');box.textContent=error.message;box.style.display='block'}}
 async function updateBytes(){try{renderByteDiagnostics(await fetchJson('/api/byte-diagnostics'))}catch(error){console.error('byte diagnostics',error)}}
 const histogramSelector=byId('histogramMode');histogramSelector.value=histogramMode;histogramSelector.addEventListener('change',event=>setHistogramMode(event.target.value));updateStats();updateBytes();setInterval(updateStats,1000);setInterval(updateBytes,2000);
 </script></body></html>'''

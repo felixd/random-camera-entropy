@@ -25,6 +25,44 @@ MASK_PATTERNS = (
 SERIALIZATION_ORDERS = ("row-major", "serpentine", "tile-interleave")
 
 
+def canonical_legacy_sampling(name: str) -> str:
+    """Normalize the historical sampling alias used by pre-v7.7 profiles."""
+    return "checkerboard-even" if name == "checkerboard" else name
+
+
+def effective_spatial_selection(args: object) -> dict[str, object]:
+    """Describe the mask that actually selects production pixels.
+
+    ``spatial_sampling`` is a compatibility option and only participates when
+    ``spatial_mask_pattern=legacy``.  Reporting the compatibility value as the
+    active mask for modern patterns was misleading, so every manifest/report
+    now carries this explicit effective description.
+    """
+    pattern = str(getattr(args, "spatial_mask_pattern", "legacy"))
+    legacy = canonical_legacy_sampling(str(getattr(args, "spatial_sampling", "full")))
+    effective = legacy if pattern == "legacy" else pattern
+    details: dict[str, object] = {
+        "pattern": pattern,
+        "legacy_sampling": legacy,
+        "effective": effective,
+    }
+    if pattern == "grid":
+        details.update({
+            "step": [int(getattr(args, "spatial_step_x", 1)), int(getattr(args, "spatial_step_y", 1))],
+            "phase": [int(getattr(args, "spatial_phase_x", 0)), int(getattr(args, "spatial_phase_y", 0))],
+        })
+        details["label"] = f"grid {details['step'][0]}×{details['step'][1]} · phase ({details['phase'][0]},{details['phase'][1]})"
+    elif pattern == "block":
+        details.update({
+            "block": [int(getattr(args, "spatial_block_width", 4)), int(getattr(args, "spatial_block_height", 4))],
+            "phase": [int(getattr(args, "spatial_phase_x", 0)), int(getattr(args, "spatial_phase_y", 0))],
+        })
+        details["label"] = f"block {details['block'][0]}×{details['block'][1]} · phase ({details['phase'][0]},{details['phase'][1]})"
+    else:
+        details["label"] = effective
+    return details
+
+
 @dataclass(frozen=True)
 class SpatialOptions:
     pattern: str = "legacy"

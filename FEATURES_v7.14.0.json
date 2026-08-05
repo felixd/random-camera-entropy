@@ -1,0 +1,10 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.7.14.0",
+  "features": [
+    "production-safe profile",
+    "effective spatial selection reporting",
+    "full spatial mask defaults",
+    "accurate Von Neumann pipeline labels",
+    "production diagnostics disabled by default"
+  ]
+}

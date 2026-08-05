@@ -29,6 +29,43 @@ def nested(data: dict[str, Any], path: str, default: Any = None) -> Any:
     return current
 
 
+
+def as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def build_pipeline_label(config: dict[str, Any]) -> str:
+    sample_mode = str(config.get("sample_mode", "xor"))
+    lsb_bits = int(config.get("lsb_bits", 1) or 1)
+    sample_name = {"xor": "Temporal XOR", "direct": "Direct Y", "delta": "Temporal delta"}.get(sample_mode, sample_mode)
+    stages = [f"{sample_name} / {lsb_bits} LSB", "mask", "symbol RCT/APT"]
+    if as_bool(config.get("von_neumann_stage", False)):
+        passes = max(1, int(config.get("von_neumann_passes", 1) or 1))
+        stages.append(f"VN ×{passes}")
+    conditioner = str(config.get("conditioner", "sha3-512")).strip().lower()
+    if conditioner not in {"", "none", "off", "disabled"}:
+        stages.append({"sha3-512": "SHA3-512"}.get(conditioner, conditioner))
+    return " → ".join(stages)
+
+
+def effective_spatial_label(config: dict[str, Any], terminal: dict[str, Any]) -> str:
+    selection = config.get("spatial_selection")
+    if not isinstance(selection, dict):
+        selection = terminal.get("spatial_selection") if isinstance(terminal.get("spatial_selection"), dict) else {}
+    if selection.get("label"):
+        return str(selection["label"])
+    return str(
+        config.get("effective_spatial_selection")
+        or config.get("spatial_sampling")
+        or terminal.get("spatial_sampling")
+        or config.get("spatial_mask_pattern")
+        or "n/a"
+    )
+
 def binary_geometry_section(run: Path, summary: dict[str, Any]) -> str:
     files = summary.get("files", []) if isinstance(summary.get("files"), list) else []
     rows = [item for item in files if isinstance(item, dict)]
@@ -144,15 +181,12 @@ def main() -> int:
 
     sample_mode = str(config.get("sample_mode", "xor"))
     lsb_bits = int(config.get("lsb_bits", 1) or 1)
-    sample_name = {"xor": "Temporal XOR", "direct": "Direct Y", "delta": "Temporal delta"}.get(sample_mode, sample_mode)
-    pipeline_label = (
-        f"{sample_name} / {lsb_bits} LSB → mask → symbol RCT/APT → SHA3-512"
-        if config.get("von_neumann_stage") is False
-        else f"{sample_name} / {lsb_bits} LSB → mask → symbol RCT/APT → VN + SHA3-512"
-    )
+    pipeline_label = build_pipeline_label(config)
+    spatial_label = effective_spatial_label(config, terminal)
     cards = [
         metric_card("Status", status, complete.get("app_version") or failure.get("app_version") or "", status_class),
         metric_card("Pipeline", pipeline_label, f'conditioner input {config.get("conditioner_input_bits", "n/a")} bit'),
+        metric_card("Selekcja przestrzenna", spatial_label, f'pattern={config.get("spatial_mask_pattern", "n/a")}'),
         metric_card("Finalne P(1)", fmt(final.get("p1"), 8), f"odchylenie {fmt(abs(float(final['p1'])-.5) if isinstance(final.get('p1'), (int,float)) else None, 7)}"),
         metric_card("Finalne |φ| lag-1", fmt(abs(float(final["lag1_phi"])) if isinstance(final.get("lag1_phi"), (int, float)) else None, 8)),
         metric_card("Hmin bajtu SHA3", fmt(final.get("hmin"), 8), f"χ² p={fmt(final.get('chi_p'), 7)}"),

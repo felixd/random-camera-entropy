@@ -152,6 +152,9 @@ def main() -> int:
         assert env["SAMPLE_MODE"] == "delta"
         assert env["LSB_BITS"] == "4"
         assert env["ENTROPY_CREDIT_BITS_PER_PIXEL"] == "0.5"
+        # Modern mask patterns ignore the legacy selector and normalize it to
+        # full so disabled HTML fields cannot leak checkerboard defaults.
+        assert env["SPATIAL_SAMPLING"] == "full"
 
         comma_payload = dict(payload, entropy_credit_bits_per_pixel="0,5")
         comma_env, _, _ = manager._build_environment(

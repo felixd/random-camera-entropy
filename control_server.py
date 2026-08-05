@@ -49,7 +49,7 @@ from werkzeug.security import check_password_hash
 from spatial_docs import register_documentation_routes
 from profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.04.camera-entropy-distributed-control.7.13.0"
+APP_VERSION = "2026.08.05.camera-entropy-distributed-control.7.14.0"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}
@@ -657,11 +657,16 @@ class JobManager:
             raise ValueError("MASK_TRANSITION_MIN musi być mniejsze od MASK_TRANSITION_MAX")
 
         spatial = str(payload.get("spatial_sampling", "")).strip()
-        if spatial:
-            if spatial not in ALLOWED_SPATIAL:
-                raise ValueError("Nieobsługiwane spatial_sampling")
-            env["SPATIAL_SAMPLING"] = spatial
-        pattern = env.get("SPATIAL_MASK_PATTERN", "legacy")
+        if spatial and spatial not in ALLOWED_SPATIAL:
+            raise ValueError("Nieobsługiwane spatial_sampling")
+        pattern = env.get("SPATIAL_MASK_PATTERN", "full")
+        # spatial_sampling is a legacy compatibility switch.  Disabled form
+        # controls are not submitted by browsers, therefore modern patterns
+        # must not inherit the historical checkerboard default from run_one.sh.
+        if pattern == "legacy":
+            env["SPATIAL_SAMPLING"] = spatial or "full"
+        else:
+            env["SPATIAL_SAMPLING"] = "full"
         step_x = int(env.get("SPATIAL_STEP_X", "1")); step_y = int(env.get("SPATIAL_STEP_Y", "1"))
         phase_x = int(env.get("SPATIAL_PHASE_X", "0")); phase_y = int(env.get("SPATIAL_PHASE_Y", "0"))
         block_width = int(env.get("SPATIAL_BLOCK_WIDTH", "4")); block_height = int(env.get("SPATIAL_BLOCK_HEIGHT", "4"))

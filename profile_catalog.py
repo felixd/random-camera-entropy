@@ -81,6 +81,36 @@ PROFILE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "help": "Kwalifikacja obejmująca pełny warm-up po starcie źródła.",
         "preset": {"runs": 3, "first_warmup_seconds": 1800, "next_warmup_seconds": 0},
     },
+    "production-safe": {
+        "script": "run_production.sh",
+        "label": "PRODUCTION FINAL — XOR 1 LSB / SHA3-512",
+        "category": "Produkcja",
+        "help": (
+            "Zatwierdzony tor produkcyjny: temporal XOR, 1 LSB, disjoint lag 4, "
+            "pełna zamrożona maska, credit 0,5, SHA3-512/2048 bitów. "
+            "Kosztowne pliki i podglądy diagnostyczne są wyłączone."
+        ),
+        "preset": {
+            "sample_mode": "xor",
+            "lsb_bits": 1,
+            "pairing_mode": "disjoint",
+            "pair_lag_frames": 4,
+            "spatial_mask_pattern": "full",
+            "spatial_sampling": "full",
+            "serialization_order": "row-major",
+            "entropy_credit_bits_per_pixel": 0.5,
+            "von_neumann_passes": 0,
+            "conditioner": "sha3-512",
+            "conditioner_input_bits": 2048,
+            "conditioned_mib": 100,
+            "diagnostic_vn_mib": 0,
+            "validation_mib": 0,
+            "calibration_pairs": 512,
+            "web_images": False,
+            "mask_snapshot_images": False,
+            "live_byte_diagnostics": False,
+        },
+    },
     "single": {
         "script": "run_one.sh",
         "label": "Pojedynczy przebieg — konfiguracja ręczna",

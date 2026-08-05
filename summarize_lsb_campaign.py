@@ -32,7 +32,7 @@ from report_ui import (
     table_html,
 )
 
-APP_VERSION = "2026.08.04.camera-entropy-lsb-campaign.7.13.0"
+APP_VERSION = "2026.08.05.camera-entropy-lsb-campaign.7.14.0"
 MAX_LSB_BITS = 4
 
 

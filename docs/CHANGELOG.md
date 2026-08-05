@@ -1,3 +1,12 @@
+## 7.14.0 — 2026-08-05
+
+- dodano zatwierdzony profil produkcyjny XOR/1 LSB, disjoint lag 4, pełna maska, SHA3-512/2048, credit 0,5;
+- usunięto semantyczną niespójność `checkerboard-even` kontra faktyczna pełna maska;
+- raport pipeline'u poprawnie obsługuje numeryczne `0/1` dla etapu Von Neumanna;
+- manifesty i API raportują efektywną selekcję przestrzenną oraz osobno wartość legacy;
+- produkcyjny skrypt wyłącza kosztowną diagnostykę i pliki walidacyjne;
+- wersja podbita do `2026.08.05.camera-entropy-distributed.7.14.0`.
+
 ## 7.13.0 — 2026-08-04
 
 - równoległa weryfikacja SHA-256 zamkniętych chunków z parametrem `--verify-workers` / `FINAL_PREPROD_VERIFY_WORKERS`;

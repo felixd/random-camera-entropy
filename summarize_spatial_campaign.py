@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "2026.08.04.camera-entropy-spatial-campaign.7.13.0"
+APP_VERSION = "2026.08.05.camera-entropy-spatial-campaign.7.14.0"
 
 
 def read_json(path: Path) -> dict[str, Any]:

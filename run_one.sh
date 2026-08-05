@@ -22,9 +22,9 @@ PAIR_LAG_FRAMES="${PAIR_LAG_FRAMES:-4}"
 SAMPLE_MODE="${SAMPLE_MODE:-xor}"
 LSB_BITS="${LSB_BITS:-1}"
 ENTROPY_CREDIT_BITS_PER_PIXEL="${ENTROPY_CREDIT_BITS_PER_PIXEL:-1.0}"
-SPATIAL_SAMPLING="${SPATIAL_SAMPLING:-checkerboard-even}"
+SPATIAL_SAMPLING="${SPATIAL_SAMPLING:-full}"
 # CAMERA_ENTROPY_SPATIAL_V7_7
-SPATIAL_MASK_PATTERN="${SPATIAL_MASK_PATTERN:-legacy}"
+SPATIAL_MASK_PATTERN="${SPATIAL_MASK_PATTERN:-full}"
 SPATIAL_STEP_X="${SPATIAL_STEP_X:-1}"
 SPATIAL_STEP_Y="${SPATIAL_STEP_Y:-1}"
 SPATIAL_PHASE_X="${SPATIAL_PHASE_X:-0}"
@@ -94,6 +94,15 @@ awk -v a="$SHADOW_MIN_JACCARD" 'BEGIN{exit !(a>0 && a<=1)}' || fail "SHADOW_MIN_
 [[ "$SHADOW_FAIL_CONSECUTIVE" =~ ^[0-9]+$ ]] && (( SHADOW_FAIL_CONSECUTIVE >= 1 )) || fail "SHADOW_FAIL_CONSECUTIVE musi być >= 1"
 [[ "$STREAM_STATS_WINDOW_PAIRS" =~ ^[0-9]+$ ]] && (( STREAM_STATS_WINDOW_PAIRS >= 1 )) || fail "STREAM_STATS_WINDOW_PAIRS musi być >= 1"
 [[ "$SPATIAL_MASK_PATTERN" =~ ^(legacy|full|checkerboard-even|checkerboard-odd|grid|block)$ ]] || fail "Nieprawidłowy SPATIAL_MASK_PATTERN"
+if [[ "$SPATIAL_MASK_PATTERN" == legacy ]]; then
+    EFFECTIVE_SPATIAL_SELECTION="$SPATIAL_SAMPLING"
+    [[ "$EFFECTIVE_SPATIAL_SELECTION" == checkerboard ]] && EFFECTIVE_SPATIAL_SELECTION="checkerboard-even"
+else
+    EFFECTIVE_SPATIAL_SELECTION="$SPATIAL_MASK_PATTERN"
+    # This switch is ignored for modern patterns. Normalize it so command
+    # lines and manifests cannot misleadingly advertise checkerboard sampling.
+    SPATIAL_SAMPLING="full"
+fi
 [[ "$SERIALIZATION_ORDER" =~ ^(row-major|serpentine|tile-interleave)$ ]] || fail "Nieprawidłowy SERIALIZATION_ORDER"
 for value in "$SPATIAL_STEP_X" "$SPATIAL_STEP_Y" "$SPATIAL_PHASE_X" "$SPATIAL_PHASE_Y" "$SPATIAL_BLOCK_WIDTH" "$SPATIAL_BLOCK_HEIGHT" "$SERIALIZATION_TILE_WIDTH" "$SERIALIZATION_TILE_HEIGHT"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Parametry maski i kafli muszą być nieujemnymi liczbami całkowitymi"
@@ -369,7 +378,9 @@ cat > "$RUN_DIR/runner_config.json" <<JSON
   "bit_order": "pixel-major-lsb-first",
   "entropy_credit_bits_per_pixel": $ENTROPY_CREDIT_BITS_PER_PIXEL,
   "mask_calibration_source": "temporal-xor-lsb0",
-  "spatial_sampling": "$SPATIAL_SAMPLING",
+  "spatial_sampling": "$EFFECTIVE_SPATIAL_SELECTION",
+  "spatial_sampling_legacy": "$SPATIAL_SAMPLING",
+  "effective_spatial_selection": "$EFFECTIVE_SPATIAL_SELECTION",
   "spatial_mask_pattern": "$SPATIAL_MASK_PATTERN",
   "spatial_step_x": $SPATIAL_STEP_X,
   "spatial_step_y": $SPATIAL_STEP_Y,
@@ -426,7 +437,7 @@ JSON
 
 log "Start: $RUN_DIR"
 log "Źródło: $SOURCE_TYPE — $source_label"
-log "Nastaw: exposure=$EXPOSURE, $PAIRING_MODE/k=$PAIR_LAG_FRAMES, sample=$SAMPLE_MODE/${LSB_BITS}LSB, credit=$ENTROPY_CREDIT_BITS_PER_PIXEL bit/pixel, spatial=$SPATIAL_SAMPLING, dual-weave=$DUAL_WEAVE_COMPARISON (orders=$DUAL_WEAVE_ORDERS; alignments=$DUAL_WEAVE_ALIGNMENTS)"
+log "Nastaw: exposure=$EXPOSURE, $PAIRING_MODE/k=$PAIR_LAG_FRAMES, sample=$SAMPLE_MODE/${LSB_BITS}LSB, credit=$ENTROPY_CREDIT_BITS_PER_PIXEL bit/pixel, spatial=$EFFECTIVE_SPATIAL_SELECTION (pattern=$SPATIAL_MASK_PATTERN; legacy=$SPATIAL_SAMPLING), dual-weave=$DUAL_WEAVE_COMPARISON (orders=$DUAL_WEAVE_ORDERS; alignments=$DUAL_WEAVE_ALIGNMENTS)"
 log "Cele: VN×$VON_NEUMANN_PASSES=$DIAGNOSTIC_VN_BYTES B, conditioner=$CONDITIONER/$CONDITIONED_BYTES B, validation=$VALIDATION_BYTES B, exit-on-limit=$EXIT_ON_OUTPUT_LIMIT"
 "${command[@]}" > >(tee "$RUN_DIR/console.log") 2>&1 &
 pid=$!
