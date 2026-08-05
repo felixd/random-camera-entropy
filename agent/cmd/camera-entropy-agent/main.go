@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.2"
+	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.3"
 	protocolVersion = 1
 	protocolMagic   = "CEYTLS01"
 	maxHeaderBytes  = 64 * 1024
@@ -61,6 +61,7 @@ type config struct {
 	Probe           bool
 	ProbeFrames     int
 	Verbose         bool
+	ShowVersion     bool
 }
 
 type frame struct {
@@ -210,12 +211,13 @@ func parseConfig() config {
 	flag.BoolVar(&cfg.Probe, "probe", false, "test candidate cameras and exit")
 	flag.IntVar(&cfg.ProbeFrames, "probe-frames", 2, "frames read by each probe")
 	flag.BoolVar(&cfg.Verbose, "verbose", envBool("VERBOSE", false), "verbose logging")
+	flag.BoolVar(&cfg.ShowVersion, "version", false, "print agent version and exit")
 	flag.Parse()
 	_ = configPath
 	cfg.ScanDevices = splitNonEmpty(scan)
 	cfg.ControlCheck = time.Duration(*checkSeconds * float64(time.Second))
 	cfg.SocketTimeout = time.Duration(*socketSeconds * float64(time.Second))
-	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.FPS <= 0 || cfg.ClientBacklog < 2 || cfg.ProbeFrames < 1 {
+	if !cfg.ShowVersion && (cfg.Width <= 0 || cfg.Height <= 0 || cfg.FPS <= 0 || cfg.ClientBacklog < 2 || cfg.ProbeFrames < 1) {
 		log.Fatal("invalid dimensions, FPS, backlog or probe frame count")
 	}
 	return cfg
@@ -665,7 +667,7 @@ func tlsConfig(cfg config) (*tls.Config, error) {
 
 func frameHeader(cfg config, f *frame) map[string]any {
 	digest := sha256.Sum256(f.Payload)
-	return map[string]any{"type": "frame", "version": protocolVersion, "source_id": cfg.SourceID, "frame_id": f.ID, "captured_unix_ns": f.UnixNS, "captured_monotonic_ns": f.MonotonicNS, "width": cfg.Width, "height": cfg.Height, "pixel_format": "Y8", "payload_bytes": len(f.Payload), "sha256": hex.EncodeToString(digest[:]), "controls": f.Controls, "dropped_frames": 0}
+	return map[string]any{"type": "frame", "version": protocolVersion, "source_id": cfg.SourceID, "frame_id": f.ID, "captured_unix_ns": f.UnixNS, "captured_monotonic_ns": f.MonotonicNS, "width": cfg.Width, "height": cfg.Height, "pixel_format": "Y8", "payload_bytes": len(f.Payload), "sha256": hex.EncodeToString(digest[:]), "controls": f.Controls, "control_value_schema": "integer-v1", "dropped_frames": 0}
 }
 
 func writeAgentError(conn *tls.Conn, cfg config, sessionID uint64, code, reason string, retryable bool) {
@@ -714,8 +716,9 @@ func serveClient(ctx context.Context, cfg config, c *camera, raw net.Conn, sessi
 	controls, _ := c.controls.Load().(map[string]any)
 	hello := map[string]any{
 		"type": "hello", "version": protocolVersion, "app_version": appVersion, "source_id": cfg.SourceID, "session_id": sessionID,
-		"device": c.device, "mode": map[string]any{"fourcc": "YUYV", "width": cfg.Width, "height": cfg.Height, "reported_fps": cfg.FPS, "controls": controls},
-		"payload": "uncompressed direct Y bytes extracted from YUYV", "agent_started_unix_ns": c.startedUnix,
+		"device": c.device, "mode": map[string]any{"fourcc": "YUYV", "width": cfg.Width, "height": cfg.Height, "reported_fps": cfg.FPS, "controls": controls, "control_value_schema": "integer-v1"},
+		"control_value_schema": "integer-v1",
+		"payload":              "uncompressed direct Y bytes extracted from YUYV", "agent_started_unix_ns": c.startedUnix,
 		"capture_started_unix_ns": c.startedUnix, "agent_uptime_seconds": warmup, "source_warmup_seconds": warmup,
 		"latest_global_frame_id": c.latestID.Load(), "continuous_capture": true, "idle_buffering": false,
 	}
@@ -776,6 +779,10 @@ func serveClient(ctx context.Context, cfg config, c *camera, raw net.Conn, sessi
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
 	cfg := parseConfig()
+	if cfg.ShowVersion {
+		fmt.Println(appVersion)
+		return
+	}
 	if _, err := exec.LookPath("v4l2-ctl"); err != nil {
 		log.Fatal("v4l2-ctl is required (package v4l-utils)")
 	}

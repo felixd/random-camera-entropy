@@ -50,6 +50,7 @@ import numpy as np
 from flask import Flask, Response, abort, render_template_string, send_from_directory
 
 from app.sources.frame_sources import FrameSource, create_frame_source, redact_url
+from app.sources.control_values import control_integer
 from app.core.spatial_sampling import (
     align_previous_frame,
     build_pattern_set,
@@ -73,7 +74,7 @@ from app.core.masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelM
 from app.core.entropy_extractors import repeated_von_neumann, von_neumann_split
 from app.core.stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.2"
+APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.3"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -3137,15 +3138,20 @@ class Service:
         self.control_checks += 1
         problems: list[str] = []
         if self.args.manual_exposure:
-            if snapshot.get("auto_exposure") != 1:
-                problems.append(f"auto_exposure={snapshot.get('auto_exposure')} expected=1")
+            auto_exposure = control_integer(snapshot.get("auto_exposure"))
+            exposure_absolute = control_integer(snapshot.get("exposure_time_absolute"))
+            if auto_exposure != 1:
+                problems.append(
+                    f"auto_exposure={snapshot.get('auto_exposure')!r} "
+                    f"normalized={auto_exposure!r} expected=1"
+                )
             if (
                 self.args.exposure_value is not None
-                and snapshot.get("exposure_time_absolute") != self.args.exposure_value
+                and exposure_absolute != self.args.exposure_value
             ):
                 problems.append(
-                    f"exposure_time_absolute={snapshot.get('exposure_time_absolute')} "
-                    f"expected={self.args.exposure_value}"
+                    f"exposure_time_absolute={snapshot.get('exposure_time_absolute')!r} "
+                    f"normalized={exposure_absolute!r} expected={self.args.exposure_value}"
                 )
         if problems:
             self.control_mismatches += 1

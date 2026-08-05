@@ -76,3 +76,19 @@ func TestAgentErrorMessage(t *testing.T) {
 		t.Fatalf("retryable not preserved: %#v", header["retryable"])
 	}
 }
+
+func TestFrameHeaderDeclaresNumericControlSchema(t *testing.T) {
+	cfg := config{SourceID: "test", Width: 2, Height: 1}
+	f := &frame{ID: 1, Payload: []byte{1, 2}, Controls: map[string]any{
+		"auto_exposure":          1,
+		"exposure_time_absolute": 7000,
+	}}
+	header := frameHeader(cfg, f)
+	if header["control_value_schema"] != "integer-v1" {
+		t.Fatalf("unexpected control schema: %#v", header["control_value_schema"])
+	}
+	controls, ok := header["controls"].(map[string]any)
+	if !ok || controls["auto_exposure"] != 1 {
+		t.Fatalf("controls are not canonical integers: %#v", header["controls"])
+	}
+}

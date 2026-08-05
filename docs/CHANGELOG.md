@@ -1,5 +1,14 @@
 # Changelog
 
+## 8.0.3 — 2026-08-05
+
+- naprawiono interoperacyjność agent Go → worker Python: kontrolki V4L2 są przesyłane jako kanoniczne liczby ze schematem `integer-v1`;
+- worker TLS-Y defensywnie normalizuje wartości starszych agentów, np. `auto_exposure: 1 (Manual Mode)` do liczby `1`, przed fail-closed;
+- kontrola ekspozycji raportuje jednocześnie wartość surową, znormalizowaną i oczekiwaną, gdy danych faktycznie nie da się poprawnie zinterpretować;
+- hello i manifest źródła zapisują wersję agenta oraz schemat wartości kontrolek;
+- agent obsługuje `--version`; instalator sprawdza wersję binarium przed i po instalacji oraz usuwa stare binaria pozostawione w katalogu źródeł;
+- dodano `agent/build.sh`, który buduje wyłącznie do `agent/bin/`, oraz testy regresyjne starego formatu metadanych i schematu `integer-v1`.
+
 ## 8.0.2 — 2026-08-05
 
 - poprawiono parser `v4l2-ctl --get-ctrl`: wartości menu, np. `auto_exposure: 1 (Manual Mode)`, są rozpoznawane jako liczba `1`, a nie tekst;

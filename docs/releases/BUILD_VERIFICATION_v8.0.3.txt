@@ -1,0 +1,17 @@
+Camera Entropy Distributed 8.0.3 — build verification
+Date: 2026-08-05
+
+PASS: Python compileall for app/ and tests/
+PASS: Bash syntax for scripts/ and agent/
+PASS: JSON validation
+PASS: 33/33 tests/selftest*.py
+PASS: Go unit tests
+PASS: go vet
+PASS: static Go build with CGO_ENABLED=0
+PASS: embedded Go agent version: 2026.08.05.camera-entropy-go-agent.8.0.3
+PASS: regression parsing auto_exposure: 1 (Manual Mode) -> 1
+PASS: CEYTLS01 frame metadata declares control_value_schema=integer-v1
+PASS: Python TLS-Y source normalizes legacy control strings before fail-closed comparison
+
+NOT RUN: tests/control_selftest.py because Flask/Werkzeug were not installed in the build environment. The module compiled successfully; control-plane behavior unrelated to this source-control interoperability fix was covered by the existing self-tests.
+NOT RUN: physical V4L2/mTLS integration against the user's camera hardware. The release contains both backward-compatible receiver normalization and canonical agent metadata to cover the observed failure mode.

@@ -22,7 +22,7 @@ from app.reporting.report_ui import (
     rate_span, rate_unit_selector, table_html,
 )
 
-APP_VERSION = "2026.08.05.camera-entropy-production-assessment-report.8.0.2"
+APP_VERSION = "2026.08.05.camera-entropy-production-assessment-report.8.0.3"
 STAGE_ORDER = (
     "lsb-mode-width", "temporal-pairing", "spatial-serialization",
     "entropy-credit", "conditioner", "dual-weave", "reproducibility",

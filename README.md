@@ -1,6 +1,6 @@
-# Camera Entropy Distributed 8.0.2
+# Camera Entropy Distributed 8.0.3
 
-System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.2 naprawia interpretację kontrolek V4L2 typu menu, automatycznie przywraca ekspozycję po rzeczywistej zmianie oraz przekazuje klientowi czytelne błędy agenta zamiast zamknięcia TLS bez komunikatu.
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.3 ujednolica numeryczny format kontrolek V4L2 pomiędzy agentem Go i workerem Python, zachowuje zgodność ze starszymi agentami oraz zabezpiecza instalację przed przypadkowym uruchomieniem starego binarium.
 
 > To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 
@@ -157,6 +157,15 @@ cd agent
 go run ./cmd/camera-entropy-agent --probe
 ```
 
+Kontrolowana lokalna budowa trafia wyłącznie do `agent/bin/`:
+
+```bash
+./agent/build.sh
+./agent/bin/camera-entropy-agent --version
+```
+
+Nie uruchamiaj binarium pozostawionego historycznie w `agent/cmd/camera-entropy-agent/`. Instalator 8.0.3 usuwa takie stare pliki i po instalacji porównuje wersję zbudowaną z wersją w `/usr/local/bin/camera-entropy-agent`.
+
 ### Instalacja agenta
 
 Wymagany jest Go 1.22 lub nowszy oraz pliki `pki/ca.crt`, `pki/agent.crt`, `pki/agent.key`.
@@ -176,13 +185,14 @@ Instalator:
 - wykonuje probe `/dev/video0..2` jako użytkownik usługi;
 - instaluje i uruchamia `camera-entropy-agent.service`.
 
-Logi:
+Kontrola zainstalowanej wersji i logi:
 
 ```bash
+/usr/local/bin/camera-entropy-agent --version
 journalctl -u camera-entropy-agent -f
 ```
 
-Kontrolki V4L2 typu menu są normalizowane do wartości numerycznych. Przykładowy poprawny odczyt:
+Agent przesyła kontrolki według schematu `integer-v1`, a worker dodatkowo normalizuje metadane po swojej stronie dla zgodności ze starszym agentem. Kontrolki V4L2 typu menu są więc porównywane jako wartości numeryczne. Przykładowy poprawny odczyt:
 
 ```text
 auto_exposure: 1 (Manual Mode)
@@ -324,9 +334,8 @@ for test in tests/selftest*.py; do PYTHONPATH=. python3 "$test" || exit 1; done
 Agent Go:
 
 ```bash
-cd agent
-go test ./...
-go build ./cmd/camera-entropy-agent
+./agent/build.sh
+./agent/bin/camera-entropy-agent --version
 ```
 
 Skrypty Bash:

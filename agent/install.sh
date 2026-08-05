@@ -55,8 +55,17 @@ EOF
 fi
 
 log "Building Go agent"
+# Remove historical in-tree binaries so an operator cannot accidentally run a
+# stale executable from agent/cmd/... after updating the source tree.
+rm -f "$SCRIPT_DIR/camera-entropy-agent" \
+      "$SCRIPT_DIR/cmd/camera-entropy-agent/camera-entropy-agent"
 (cd "$SCRIPT_DIR" && go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o camera-entropy-agent ./cmd/camera-entropy-agent)
+built_version="$($SCRIPT_DIR/camera-entropy-agent --version)"
+log "Built $built_version"
 install -o root -g root -m 0755 "$SCRIPT_DIR/camera-entropy-agent" /usr/local/bin/camera-entropy-agent
+installed_version="$(/usr/local/bin/camera-entropy-agent --version)"
+[[ "$installed_version" == "$built_version" ]] || fail "Installed agent version mismatch: built=$built_version installed=$installed_version"
+log "Installed $installed_version"
 rm -f "$SCRIPT_DIR/camera-entropy-agent"
 
 install -d -o root -g "$AGENT_GROUP" -m 0750 "$CONFIG_DIR" "$CONFIG_DIR/pki"

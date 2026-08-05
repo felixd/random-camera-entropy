@@ -22,6 +22,7 @@ import numpy as np
 from app.sources.frame_transport import (
     FrameProtocolError, make_client_context, recv_message, send_message, verify_frame_message,
 )
+from app.sources.control_values import normalize_controls
 
 EXPECTED_FOURCC = "YUYV"
 TARGET_VID = "041e"
@@ -252,6 +253,9 @@ class TlsYSource(FrameSource):
         self.sock: Optional[ssl.SSLSocket] = None
         self.hello: dict[str, Any] = {}
         self.latest_controls: dict[str, Optional[int]] = {}
+        self.latest_controls_raw: dict[str, Any] = {}
+        self.agent_app_version = ""
+        self.control_value_schema = "legacy"
         self.last_frame_id: Optional[int] = None
         self.server_cn: Optional[str] = None
         self.connection_generation = 0
@@ -329,7 +333,10 @@ class TlsYSource(FrameSource):
         self.width = width
         self.height = height
         self.reported_fps = reported_fps
-        self.latest_controls = dict(mode.get("controls") or {})
+        self.latest_controls_raw = dict(mode.get("controls") or {})
+        self.latest_controls = normalize_controls(self.latest_controls_raw)
+        self.agent_app_version = str(hello.get("app_version") or "unknown")
+        self.control_value_schema = str(hello.get("control_value_schema") or mode.get("control_value_schema") or "legacy")
         self.label = f"tls-y://{self.args.tls_host}:{self.args.tls_port}/{hello.get('source_id','source')}"
         self.server_cn = self.args.tls_server_name
         self.last_frame_id = None
@@ -337,9 +344,15 @@ class TlsYSource(FrameSource):
         self.connection_generation += 1
         self.last_connected_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self.logger.info(
-            "connected to %s, mode=%sx%s Y8 generation=%d agent_session=%s",
+            "connected to %s, mode=%sx%s Y8 generation=%d agent_session=%s agent=%s controls=%s",
             self.label, self.width, self.height, self.connection_generation, hello.get("session_id", "n/a"),
+            self.agent_app_version, self.control_value_schema,
         )
+        if self.control_value_schema == "legacy" and self.latest_controls_raw != self.latest_controls:
+            self.logger.warning(
+                "legacy camera control metadata normalized locally: raw=%r normalized=%r",
+                self.latest_controls_raw, self.latest_controls,
+            )
 
     def open(self) -> None:
         self._closing = False
@@ -460,7 +473,8 @@ class TlsYSource(FrameSource):
             self.last_frame_id = frame_id
             if int(header["width"]) != self.width or int(header["height"]) != self.height:
                 raise FrameProtocolError("remote frame dimensions changed")
-            self.latest_controls = dict(header.get("controls") or {})
+            self.latest_controls_raw = dict(header.get("controls") or {})
+            self.latest_controls = normalize_controls(self.latest_controls_raw)
             y = np.frombuffer(message.payload, dtype=np.uint8).reshape(self.height, self.width).copy()
             timestamp = int(header["captured_monotonic_ns"]) / 1_000_000_000.0
             self.last_frame_received_monotonic = time.monotonic()
@@ -470,6 +484,10 @@ class TlsYSource(FrameSource):
             return SourceFrame(frame_id, timestamp, y, None, metadata)
 
     def control_snapshot(self) -> dict[str, Optional[int]]:
+        # Always expose canonical numeric values to fail-closed control checks.
+        # Older Go/Python agents may send menu controls as strings such as
+        # ``auto_exposure: 1 (Manual Mode)``; normalization keeps the wire
+        # protocol backward compatible without weakening the comparison.
         return dict(self.latest_controls)
 
     def close(self) -> None:
@@ -518,6 +536,10 @@ class TlsYSource(FrameSource):
             "endpoint": f"{self.args.tls_host}:{self.args.tls_port}",
             "server_name": self.args.tls_server_name,
             "hello": self.hello,
+            "agent_app_version": self.agent_app_version,
+            "control_value_schema": self.control_value_schema,
+            "latest_controls": dict(self.latest_controls),
+            "latest_controls_raw": dict(self.latest_controls_raw),
             "transport": "mutual TLS 1.3, framed uncompressed Y8, per-frame SHA-256, clean close handshake",
             "connection_generation": self.connection_generation,
             "reconnect_count": self.reconnect_count,

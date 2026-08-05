@@ -1,0 +1,11 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.8.0.3",
+  "release": "8.0.3",
+  "changes": [
+    "canonical integer-v1 V4L2 control metadata from the Go agent",
+    "backward-compatible Python normalization of legacy menu-control strings",
+    "agent --version and installation-time stale-binary protection",
+    "agent version and control schema recorded in TLS-Y manifests",
+    "regression tests for Manual Mode metadata across the wire boundary"
+  ]
+}
