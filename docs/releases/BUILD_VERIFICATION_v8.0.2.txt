@@ -1,0 +1,15 @@
+Camera Entropy Distributed 8.0.2 build verification
+Date: 2026-08-05
+
+PASS: Python compileall for app/ and tests/
+PASS: Bash syntax for scripts/ and agent/install.sh
+PASS: JSON parsing for project JSON files
+PASS: Go unit tests
+PASS: go vet
+PASS: static Go agent build with CGO_ENABLED=0
+PASS: V4L2 menu-control parser regression tests
+PASS: structured CEYTLS01 agent-error integration test
+PASS: TLS reconnect integration test
+PASS: 32 selftest*.py tests (the complete suite was run in batches)
+
+Not performed: hardware capture test with the user's physical UVC camera and production PKI.

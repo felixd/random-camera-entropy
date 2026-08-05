@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.1"
+	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.2"
 	protocolVersion = 1
 	protocolMagic   = "CEYTLS01"
 	maxHeaderBytes  = 64 * 1024
@@ -93,6 +94,11 @@ type camera struct {
 }
 
 type errorBox struct{ Err error }
+
+var (
+	errClientBusy         = errors.New("another compute client is already subscribed")
+	controlIntegerPattern = regexp.MustCompile(`[-+]?\d+`)
+)
 
 func envString(name, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
@@ -272,6 +278,22 @@ func setControls(cfg config, device string) error {
 	return err
 }
 
+func parseControlInteger(output string) (int, bool) {
+	value := output
+	if index := strings.LastIndex(value, ":"); index >= 0 {
+		value = value[index+1:]
+	}
+	match := controlIntegerPattern.FindString(value)
+	if match == "" {
+		return 0, false
+	}
+	parsed, err := strconv.Atoi(match)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
 func readControls(device string) map[string]any {
 	result := map[string]any{}
 	for _, name := range []string{"auto_exposure", "exposure_time_absolute"} {
@@ -280,16 +302,68 @@ func readControls(device string) map[string]any {
 			result[name] = nil
 			continue
 		}
-		if index := strings.LastIndex(out, ":"); index >= 0 {
-			value, err := strconv.Atoi(strings.TrimSpace(out[index+1:]))
-			if err == nil {
-				result[name] = value
-				continue
-			}
+		if value, ok := parseControlInteger(out); ok {
+			result[name] = value
+			continue
 		}
 		result[name] = strings.TrimSpace(out)
 	}
 	return result
+}
+
+func controlInteger(value any) (int, bool) {
+	switch current := value.(type) {
+	case int:
+		return current, true
+	case int8:
+		return int(current), true
+	case int16:
+		return int(current), true
+	case int32:
+		return int(current), true
+	case int64:
+		return int(current), true
+	case uint:
+		return int(current), true
+	case uint8:
+		return int(current), true
+	case uint16:
+		return int(current), true
+	case uint32:
+		return int(current), true
+	case uint64:
+		if current > uint64(^uint(0)>>1) {
+			return 0, false
+		}
+		return int(current), true
+	case float64:
+		return int(current), current == float64(int(current))
+	case string:
+		return parseControlInteger(current)
+	default:
+		return 0, false
+	}
+}
+
+func controlsMatch(cfg config, controls map[string]any) (bool, string) {
+	if !cfg.ManualExposure {
+		return true, "manual exposure enforcement disabled"
+	}
+	autoExposure, autoOK := controlInteger(controls["auto_exposure"])
+	exposure, exposureOK := controlInteger(controls["exposure_time_absolute"])
+	if !autoOK || !exposureOK {
+		return false, fmt.Sprintf(
+			"cannot parse controls auto_exposure=%v exposure_time_absolute=%v",
+			controls["auto_exposure"], controls["exposure_time_absolute"],
+		)
+	}
+	if autoExposure != 1 || exposure != cfg.Exposure {
+		return false, fmt.Sprintf(
+			"auto_exposure=%d expected=1 exposure_time_absolute=%d expected=%d",
+			autoExposure, exposure, cfg.Exposure,
+		)
+	}
+	return true, "controls match"
 }
 
 func streamArgs(cfg config, device string) []string {
@@ -386,7 +460,7 @@ func (c *camera) subscribe() (*subscription, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.subscriber != nil {
-		return nil, errors.New("another compute client is already subscribed")
+		return nil, errClientBusy
 	}
 	sub := &subscription{frames: make(chan *frame, c.cfg.ClientBacklog), errs: make(chan error, 1), done: make(chan struct{})}
 	c.subscriber = sub
@@ -425,6 +499,13 @@ func (c *camera) capture(ctx context.Context) {
 		c.setFatal(err)
 		return
 	}
+	initialControls := readControls(c.device)
+	c.controls.Store(initialControls)
+	if matched, reason := controlsMatch(c.cfg, initialControls); !matched {
+		c.setFatal(fmt.Errorf("camera controls invalid after configuration: %s; state=%v", reason, initialControls))
+		return
+	}
+	log.Printf("camera controls verified: %v", initialControls)
 	cmd := exec.CommandContext(ctx, "v4l2-ctl", streamArgs(c.cfg, c.device)...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -462,17 +543,33 @@ func (c *camera) capture(ctx context.Context) {
 			lastControls = time.Now()
 			current := readControls(c.device)
 			c.controls.Store(current)
-			bad := false
-			if c.cfg.ManualExposure {
-				bad = fmt.Sprint(current["auto_exposure"]) != "1" || fmt.Sprint(current["exposure_time_absolute"]) != strconv.Itoa(c.cfg.Exposure)
-			}
-			if bad {
-				failures++
-			} else {
+			matched, reason := controlsMatch(c.cfg, current)
+			if matched {
 				failures = 0
+				continue
 			}
+
+			log.Printf("camera controls mismatch detected: %s; attempting to restore expected controls", reason)
+			restoreErr := setControls(c.cfg, c.device)
+			corrected := readControls(c.device)
+			c.controls.Store(corrected)
+			correctedMatch, correctedReason := controlsMatch(c.cfg, corrected)
+			if restoreErr == nil && correctedMatch {
+				log.Printf("camera controls restored: %v", corrected)
+				failures = 0
+				continue
+			}
+
+			failures++
+			log.Printf(
+				"camera controls remain invalid after restore attempt %d/%d: restore_error=%v state=%v reason=%s",
+				failures, c.cfg.ControlFailures, restoreErr, corrected, correctedReason,
+			)
 			if failures >= c.cfg.ControlFailures {
-				c.setFatal(fmt.Errorf("camera controls changed: %v", current))
+				c.setFatal(fmt.Errorf(
+					"camera controls cannot be restored after %d consecutive checks: %s; state=%v; restore_error=%v",
+					failures, correctedReason, corrected, restoreErr,
+				))
 				_ = cmd.Process.Kill()
 				return
 			}
@@ -571,6 +668,21 @@ func frameHeader(cfg config, f *frame) map[string]any {
 	return map[string]any{"type": "frame", "version": protocolVersion, "source_id": cfg.SourceID, "frame_id": f.ID, "captured_unix_ns": f.UnixNS, "captured_monotonic_ns": f.MonotonicNS, "width": cfg.Width, "height": cfg.Height, "pixel_format": "Y8", "payload_bytes": len(f.Payload), "sha256": hex.EncodeToString(digest[:]), "controls": f.Controls, "dropped_frames": 0}
 }
 
+func writeAgentError(conn *tls.Conn, cfg config, sessionID uint64, code, reason string, retryable bool) {
+	_ = conn.SetWriteDeadline(time.Now().Add(cfg.SocketTimeout))
+	header := map[string]any{
+		"type":       "error",
+		"version":    protocolVersion,
+		"session_id": sessionID,
+		"code":       code,
+		"reason":     reason,
+		"retryable":  retryable,
+	}
+	if err := writeMessage(conn, header, nil); err != nil {
+		log.Printf("cannot send agent error session=%d code=%s: %v", sessionID, code, err)
+	}
+}
+
 func serveClient(ctx context.Context, cfg config, c *camera, raw net.Conn, sessionID uint64) {
 	defer raw.Close()
 	conn, ok := raw.(*tls.Conn)
@@ -583,12 +695,18 @@ func serveClient(ctx context.Context, cfg config, c *camera, raw net.Conn, sessi
 	}
 	cn := certificateCN(conn)
 	if cfg.AllowedClientCN != "" && cn != cfg.AllowedClientCN {
-		log.Printf("rejected client CN=%q", cn)
+		log.Printf("rejected client CN=%q expected=%q", cn, cfg.AllowedClientCN)
+		writeAgentError(conn, cfg, sessionID, "client-not-authorized", "client certificate CN is not authorized", false)
 		return
 	}
 	sub, err := c.subscribe()
 	if err != nil {
-		log.Printf("client rejected: %v", err)
+		code, retryable := "camera-unavailable", false
+		if errors.Is(err, errClientBusy) {
+			code, retryable = "source-busy", true
+		}
+		log.Printf("client rejected session=%d code=%s: %v", sessionID, code, err)
+		writeAgentError(conn, cfg, sessionID, code, err.Error(), retryable)
 		return
 	}
 	defer c.unsubscribe(sub)
@@ -638,10 +756,12 @@ func serveClient(ctx context.Context, cfg config, c *camera, raw net.Conn, sessi
 				_ = writeMessage(conn, map[string]any{"type": "close-ack", "version": protocolVersion, "session_id": sessionID, "reason": header["reason"]}, nil)
 				return
 			}
-			log.Printf("unsupported client control: %v", header)
+			log.Printf("unsupported client control session=%d: %v", sessionID, header)
+			writeAgentError(conn, cfg, sessionID, "unsupported-control", "unsupported client control message", false)
 			return
 		case err := <-sub.errs:
 			log.Printf("session=%d stopped: %v", sessionID, err)
+			writeAgentError(conn, cfg, sessionID, "stream-stopped", err.Error(), false)
 			return
 		case f := <-sub.frames:
 			_ = conn.SetWriteDeadline(time.Now().Add(cfg.SocketTimeout))

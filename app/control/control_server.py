@@ -50,7 +50,7 @@ from app.reporting.spatial_docs import register_documentation_routes
 from app.paths import PROJECT_ROOT, TEMPLATES_ROOT, STATIC_ROOT
 from app.control.profile_catalog import ALLOWED_PROFILES, profile_rows
 # CAMERA_ENTROPY_SPATIAL_V7_7
-APP_VERSION = "2026.08.05.camera-entropy-distributed-control.8.0.1"
+APP_VERSION = "2026.08.05.camera-entropy-distributed-control.8.0.2"
 DATASET_FORMAT = "camera-entropy-frame-buffer-v1"
 READABLE_DATASET_STATUSES = {"recording", "complete", "stopped", "failed"}
 SUPPORTED_DATASET_STORAGE_MODES = {"y8", "lsb-packed"}

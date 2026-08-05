@@ -1,0 +1,11 @@
+{
+  "version": "2026.08.05.camera-entropy-distributed.8.0.2",
+  "release_type": "bugfix",
+  "features": [
+    "robust V4L2 menu control parsing",
+    "automatic camera-control restoration",
+    "structured CEYTLS01 agent errors",
+    "initial TLS-Y reconnect attempts",
+    "controlled LIVE-source failure reporting"
+  ]
+}

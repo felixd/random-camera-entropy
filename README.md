@@ -1,6 +1,6 @@
-# Camera Entropy Distributed 8.0.1
+# Camera Entropy Distributed 8.0.2
 
-System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.1 zachowuje modułową architekturę 8.0.0, agenta kamery w Go i równoległe zadania `dataset-y`, a dodatkowo poprawia ścisłe rozdzielenie parametrów źródeł LIVE i datasetowych.
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.2 naprawia interpretację kontrolek V4L2 typu menu, automatycznie przywraca ekspozycję po rzeczywistej zmianie oraz przekazuje klientowi czytelne błędy agenta zamiast zamknięcia TLS bez komunikatu.
 
 > To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 
@@ -181,6 +181,14 @@ Logi:
 ```bash
 journalctl -u camera-entropy-agent -f
 ```
+
+Kontrolki V4L2 typu menu są normalizowane do wartości numerycznych. Przykładowy poprawny odczyt:
+
+```text
+auto_exposure: 1 (Manual Mode)
+```
+
+jest interpretowany jako `auto_exposure=1`. Przy rzeczywistej zmianie ustawień agent najpierw próbuje ponownie ustawić tryb manualny i ekspozycję; zatrzymuje źródło dopiero wtedy, gdy korekta się nie powiedzie.
 
 Gdy kamera nie przechodzi probe, instalator pokazuje uprawnienia urządzeń i grupy użytkownika. Typowa ręczna naprawa dla zwykłego użytkownika:
 

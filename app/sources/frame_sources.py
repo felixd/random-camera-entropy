@@ -28,6 +28,15 @@ TARGET_VID = "041e"
 TARGET_PID = "4097"
 
 
+class RemoteAgentError(RuntimeError):
+    """Structured error returned by the authenticated camera agent."""
+
+    def __init__(self, reason: str, *, code: str = "agent-error", retryable: bool = False) -> None:
+        self.code = str(code or "agent-error")
+        self.retryable = bool(retryable)
+        super().__init__(str(reason or "unknown remote agent error"))
+
+
 @dataclass
 class SourceFrame:
     frame_id: int
@@ -276,9 +285,24 @@ class TlsYSource(FrameSource):
             raise
         sock.settimeout(self.args.source_frame_timeout_seconds)
         try:
-            message = recv_message(sock)
-            if message.payload or message.header.get("type") != "hello":
-                raise FrameProtocolError("first TLS message is not hello")
+            try:
+                message = recv_message(sock)
+            except EOFError as exc:
+                raise RuntimeError(
+                    "TLS handshake completed, but the camera agent closed the connection before "
+                    "sending its hello message. Check camera-entropy-agent logs; common causes are "
+                    "an unauthorized client certificate CN, another active LIVE consumer, or a fatal "
+                    "camera capture error."
+                ) from exc
+            message_type = message.header.get("type")
+            if message_type == "error":
+                raise RemoteAgentError(
+                    str(message.header.get("reason") or "unknown remote agent error"),
+                    code=str(message.header.get("code") or "agent-error"),
+                    retryable=bool(message.header.get("retryable", False)),
+                )
+            if message.payload or message_type != "hello":
+                raise FrameProtocolError(f"first TLS message is not hello: {message_type!r}")
             hello = message.header
             if int(hello.get("version", -1)) != 1:
                 raise FrameProtocolError(f"unsupported agent protocol: {hello.get('version')}")
@@ -319,7 +343,39 @@ class TlsYSource(FrameSource):
 
     def open(self) -> None:
         self._closing = False
-        self._connect()
+        attempts = max(0, int(getattr(self.args, "source_reconnect_attempts", 0)))
+        backoff = max(0.0, float(getattr(self.args, "source_reconnect_backoff_seconds", 1.0)))
+        last_error: BaseException | None = None
+        for attempt in range(0, attempts + 1):
+            try:
+                self._connect()
+                return
+            except RemoteAgentError as exc:
+                last_error = exc
+                self._abort_socket()
+                if not exc.retryable:
+                    raise RuntimeError(
+                        f"camera agent rejected the connection [{exc.code}]: {exc}"
+                    ) from exc
+            except Exception as exc:
+                last_error = exc
+                self._abort_socket()
+
+            if attempt >= attempts:
+                break
+            delay = backoff * (attempt + 1)
+            self.logger.warning(
+                "TLS-Y initial connection failed (%s: %s); retry %d/%d in %.1fs",
+                type(last_error).__name__, last_error, attempt + 1, attempts, delay,
+            )
+            if delay:
+                time.sleep(delay)
+
+        assert last_error is not None
+        raise RuntimeError(
+            f"TLS-Y initial connection failed after {attempts + 1} attempt(s): "
+            f"{type(last_error).__name__}: {last_error}"
+        ) from last_error
 
     def _abort_socket(self) -> None:
         sock, self.sock = self.sock, None
@@ -377,7 +433,15 @@ class TlsYSource(FrameSource):
                 continue
             message_type = message.header.get("type")
             if message_type == "error":
-                raise RuntimeError(f"remote capture agent: {message.header.get('reason','unknown error')}")
+                error = RemoteAgentError(
+                    str(message.header.get("reason") or "unknown remote agent error"),
+                    code=str(message.header.get("code") or "agent-error"),
+                    retryable=bool(message.header.get("retryable", False)),
+                )
+                if error.retryable:
+                    self._reconnect(error)
+                    continue
+                raise error
             if message_type == "close-ack":
                 if self._closing:
                     raise EOFError("remote source acknowledged close")

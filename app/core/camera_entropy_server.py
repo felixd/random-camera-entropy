@@ -73,7 +73,7 @@ from app.core.masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelM
 from app.core.entropy_extractors import repeated_von_neumann, von_neumann_split
 from app.core.stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.1"
+APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.2"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -3308,7 +3308,17 @@ class Service:
                     raise
                 self.request_process_exit("dataset exhausted")
                 return
-            raise
+            if self.stop_event.is_set():
+                self.logger.info("source loop stopped during service shutdown: %s", exc)
+                return
+            self.error = f"{type(exc).__name__}: {exc}"
+            self.logger.error("LIVE source closed unexpectedly", exc_info=True)
+            try:
+                self.write_failure_report(self.error)
+            except Exception:
+                self.logger.exception("cannot write failure report")
+            if self.args.exit_on_failure:
+                self.request_process_exit(self.error)
         except Exception as exc:
             if self.stop_event.is_set():
                 self.logger.info("source loop stopped during service shutdown: %s", exc)

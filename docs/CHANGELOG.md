@@ -1,5 +1,15 @@
 # Changelog
 
+## 8.0.2 — 2026-08-05
+
+- poprawiono parser `v4l2-ctl --get-ctrl`: wartości menu, np. `auto_exposure: 1 (Manual Mode)`, są rozpoznawane jako liczba `1`, a nie tekst;
+- usunięto fałszywy fail-closed `camera controls changed`, gdy kamera faktycznie pozostawała w trybie manualnym z właściwą ekspozycją;
+- agent przy rzeczywistej zmianie kontrolek najpierw ponownie ustawia oczekiwane wartości i dopiero po nieudanej korekcie zatrzymuje źródło;
+- agent przesyła strukturalne komunikaty `error` przez CEYTLS01 dla zajętego źródła, błędu kamery, nieautoryzowanego certyfikatu i błędnego polecenia;
+- klient TLS-Y pokazuje przyczynę odrzucenia, ponawia początkowe połączenie zgodnie z parametrami reconnect i nie kończy wątku surowym `EOFError`;
+- nieoczekiwane zamknięcie źródła LIVE tworzy `run_failed.json` i kontrolowane zakończenie joba zamiast nieobsłużonego tracebacku wątku;
+- dodano testy parsera kontrolek V4L2 oraz strukturalnych błędów agenta.
+
 ## 8.0.1 — 2026-08-05
 
 - panel WWW wyłącza i pomija wszystkie pola `dataset_*` oraz `final_preprod_*`, gdy wybrane źródło nie jest typu `dataset-y`;
