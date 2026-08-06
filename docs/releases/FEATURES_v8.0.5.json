@@ -1,0 +1,10 @@
+{
+  "version": "2026.08.06.camera-entropy-distributed.8.0.5",
+  "release": "8.0.5",
+  "features": [
+    "remote TLS-Y source warm-up credited from hello metadata",
+    "per-frame source_warmup_seconds emitted by the Go agent",
+    "effective warm-up remaining time and source age exposed by API and WWW",
+    "worker-local fail-closed fallback for sources without warm-up metadata"
+  ]
+}

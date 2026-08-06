@@ -1,5 +1,13 @@
 # Changelog
 
+## 8.0.5 — 2026-08-06
+
+- naprawiono zaliczanie warm-upu wykonanego przez zdalny serwis kamery: worker wykorzystuje `source_warmup_seconds` z komunikatu `hello` zamiast zawsze rozpoczynać pełne odliczanie od startu joba;
+- agent Go dodaje aktualny `source_warmup_seconds` do nagłówka każdej ramki CEYTLS01;
+- po reconnect przed produkcją warm-up i kalibracja nadal są restartowane fail-closed, lecz ponownie zaliczany jest rzeczywisty wiek ciągle działającego źródła;
+- API i nagłówek workera WWW pokazują `source_age_seconds`, podstawę odliczania i efektywny czas pozostały;
+- dodano testy regresyjne dla zgodności z agentem 8.0.4 (`hello`-only), metadanych każdej ramki i wizualizacji wieku źródła.
+
 ## 8.0.4 — 2026-08-05
 
 - rozdzielono kompilację Go od instalacji systemowej: `agent/build.sh` działa jako lokalny użytkownik, a `agent/install.sh` wyłącznie instaluje gotowe binarium;

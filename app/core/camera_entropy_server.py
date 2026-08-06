@@ -74,7 +74,7 @@ from app.core.masking import FrozenPixelCalibrator, MaskComparison, ShadowPixelM
 from app.core.entropy_extractors import repeated_von_neumann, von_neumann_split
 from app.core.stream_statistics import StreamingBitplaneStatistics
 
-APP_VERSION = "2026.08.05.camera-entropy-distributed.8.0.4"
+APP_VERSION = "2026.08.06.camera-entropy-distributed.8.0.5"
 TARGET_VID = "041e"
 TARGET_PID = "4097"
 EXPECTED_FOURCC = "YUYV"
@@ -1995,6 +1995,8 @@ class Service:
         self.last_processed_monotonic: Optional[float] = None
         self.warmup_started_monotonic: Optional[float] = None
         self.warmup_deadline_monotonic: Optional[float] = None
+        self.source_warmup_seconds: Optional[float] = None
+        self.source_warmup_observed_monotonic: Optional[float] = None
         self.warmup_complete = args.thermal_warmup_seconds <= 0.0
         self.exit_requested = False
         self.output_limit_reached = False
@@ -2470,6 +2472,82 @@ class Service:
         if not self.calibrator or not self.calibrator.ready:
             return "CALIBRATING"
         return "RUNNING"
+
+    @staticmethod
+    def normalize_source_warmup_seconds(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed):
+            return None
+        return max(0.0, parsed)
+
+    def source_warmup_from_manifest(self) -> Optional[float]:
+        manifest = self.source_manifest or {}
+        hello = manifest.get("hello") or {}
+        for value in (
+            manifest.get("source_warmup_seconds"),
+            hello.get("source_warmup_seconds") if isinstance(hello, dict) else None,
+            hello.get("agent_uptime_seconds") if isinstance(hello, dict) else None,
+        ):
+            parsed = self.normalize_source_warmup_seconds(value)
+            if parsed is not None:
+                return parsed
+        return None
+
+    def record_source_warmup(self, value: Any, observed_now: float) -> Optional[float]:
+        parsed = self.normalize_source_warmup_seconds(value)
+        if parsed is None:
+            return None
+        self.source_warmup_seconds = parsed
+        self.source_warmup_observed_monotonic = observed_now
+        required = max(0.0, float(self.args.thermal_warmup_seconds))
+        self.warmup_deadline_monotonic = observed_now + max(0.0, required - parsed)
+        return parsed
+
+    def current_source_warmup_seconds(self, now: Optional[float] = None) -> Optional[float]:
+        if self.source_warmup_seconds is None:
+            return None
+        current = time.monotonic() if now is None else now
+        elapsed = 0.0
+        if self.source_warmup_observed_monotonic is not None:
+            elapsed = max(0.0, current - self.source_warmup_observed_monotonic)
+        return self.source_warmup_seconds + elapsed
+
+    def begin_warmup_epoch(self, started_now: float) -> None:
+        self.warmup_started_monotonic = started_now
+        self.source_warmup_seconds = None
+        self.source_warmup_observed_monotonic = None
+        required = max(0.0, float(self.args.thermal_warmup_seconds))
+        source_age = self.source_warmup_from_manifest()
+        if source_age is not None:
+            self.record_source_warmup(source_age, started_now)
+            # Reflect credited source age in progress reporting without allowing
+            # the hello message alone to bypass validation of the first frame.
+            self.warmup_started_monotonic = started_now - min(required, source_age)
+        else:
+            self.warmup_deadline_monotonic = started_now + required
+        self.warmup_complete = required <= 0.0
+
+    def log_warmup_basis(self, context: str) -> None:
+        source_age = self.current_source_warmup_seconds()
+        if source_age is None:
+            self.logger.info(
+                "%s warm-up uses worker-local timer: required %.3f seconds",
+                context,
+                self.args.thermal_warmup_seconds,
+            )
+            return
+        self.logger.info(
+            "%s warm-up credits remote source age %.3f seconds: required %.3f, remaining %.3f seconds",
+            context,
+            source_age,
+            self.args.thermal_warmup_seconds,
+            self.warmup_remaining_seconds(),
+        )
 
     def warmup_remaining_seconds(self) -> float:
         if self.warmup_complete or self.warmup_deadline_monotonic is None:
@@ -2992,6 +3070,8 @@ class Service:
                     "configured_seconds": self.args.thermal_warmup_seconds,
                     "complete": self.warmup_complete,
                     "remaining_seconds": self.warmup_remaining_seconds(),
+                    "source_age_seconds": self.current_source_warmup_seconds(),
+                    "basis": "source-reported" if self.source_warmup_seconds is not None else "worker-local",
                 },
                 "output_limit": {
                     "target_bytes": self.args.max_output_bytes,
@@ -3208,9 +3288,8 @@ class Service:
             (self.height, self.width), self.args.calibration_pairs, self.args
         )
         self.shadow = None
-        self.warmup_started_monotonic = received_now
-        self.warmup_deadline_monotonic = received_now + self.args.thermal_warmup_seconds
-        self.warmup_complete = self.args.thermal_warmup_seconds <= 0.0
+        self.begin_warmup_epoch(received_now)
+        self.log_warmup_basis("Reconnect")
         self.logger.warning(
             "Source reconnect generation %d -> %d before production; warm-up and calibration restarted (%s)",
             old_generation, new_generation, reason,
@@ -3249,10 +3328,8 @@ class Service:
                 (self.height, self.width), self.args.calibration_pairs, self.args
             )
             self.last_read = time.monotonic()
-            self.warmup_started_monotonic = self.last_read
-            self.warmup_deadline_monotonic = (
-                self.last_read + self.args.thermal_warmup_seconds
-            )
+            self.begin_warmup_epoch(self.last_read)
+            self.log_warmup_basis("Initial source")
             while not self.stop_event.is_set():
                 source_frame = self.source.read()
                 received_now = time.monotonic()
@@ -3278,7 +3355,15 @@ class Service:
                 if not self.warmup_complete:
                     reported_warmup = source_frame.metadata.get("source_warmup_seconds")
                     if reported_warmup is not None:
-                        observed_warmup = max(0.0, float(reported_warmup))
+                        observed_warmup = self.record_source_warmup(reported_warmup, received_now)
+                        if observed_warmup is None:
+                            raise RuntimeError(
+                                f"invalid source_warmup_seconds metadata: {reported_warmup!r}"
+                            )
+                    else:
+                        observed_warmup = self.current_source_warmup_seconds(received_now)
+
+                    if observed_warmup is not None:
                         if observed_warmup < self.args.thermal_warmup_seconds:
                             continue
                     else:
@@ -4140,7 +4225,7 @@ function duration(v){v=Number(v);if(!Number.isFinite(v))return'n/a';v=Math.max(0
 function durationShort(v){v=Number(v);if(!Number.isFinite(v))return'n/a';v=Math.max(0,Math.ceil(v));const h=Math.floor(v/3600),m=Math.floor((v%3600)/60),s=Math.floor(v%60);return h?`${h}h ${m}m ${s}s`:(m?`${m}m ${s}s`:`${s}s`)}
 function percent(v){v=Number(v);return Number.isFinite(v)?new Intl.NumberFormat('pl-PL',{minimumFractionDigits:0,maximumFractionDigits:1}).format(v):'n/a'}
 function byteSize(v){v=Number(v);if(!Number.isFinite(v))return'n/a';const units=['B','KiB','MiB','GiB','TiB'];let i=0;while(Math.abs(v)>=1024&&i<units.length-1){v/=1024;i++}return`${new Intl.NumberFormat('pl-PL',{maximumFractionDigits:i?2:0}).format(v)} ${units[i]}`}
-function stateHeaderModel(s){const state=String((s||{}).state||'UNKNOWN'),w=(s||{}).warmup||{},c=(s||{}).calibration||{},conditioner=(s||{}).conditioner||{},out=(s||{}).output_limit||{},rates=(s||{}).rates||{},health=(s||{}).health||{};let detail='',progress=null;if(state==='WARMING_UP'){const remaining=Math.max(0,Number(w.remaining_seconds)||0),total=Math.max(0,Number(w.configured_seconds)||0);detail=total>0?`pozostało ${durationShort(remaining)} z ${durationShort(total)}`:`pozostało ${durationShort(remaining)}`;progress=total>0?(total-remaining)/total:null}else if(state==='CALIBRATING'){const current=Math.max(0,Number(c.pairs)||0),target=Math.max(0,Number(c.target)||0);detail=target>0?`para kalibracyjna ${n(current)} / ${n(target)} · ${percent(100*current/target)}%`:`zebrano ${n(current)} par ramek`;progress=target>0?current/target:null}else if(state==='RUNNING'||state==='OUTPUT_COMPLETE'){const conditionerTarget=Math.max(0,Number(conditioner.target_bytes)||0),useConditioner=conditionerTarget>0,target=useConditioner?conditionerTarget:Math.max(0,Number(out.target_bytes)||0),written=useConditioner?Math.max(0,Number(conditioner.written_bytes)||0):Math.max(0,Number(out.written_bytes)||0);if(target>0){detail=`${useConditioner?'SHA3':'dane'} ${byteSize(written)} / ${byteSize(target)} · ${percent(100*written/target)}%`;progress=written/target}else{detail=`produkcja ${durationShort(rates.production_uptime_seconds)} · ${rate(rates.output_bps_current)}`}}else if(state==='ERROR'||state==='API ERROR'){detail=String((s||{}).error||'błąd workera')}else if(state.endsWith('_FAILED')){detail=String(health.last_failure||(s||{}).error||'etap zatrzymany fail-closed')}else{detail=state==='START'?'uruchamianie workera':''}return{state,detail,progress:progress===null?null:Math.max(0,Math.min(1,Number(progress)||0))}}
+function stateHeaderModel(s){const state=String((s||{}).state||'UNKNOWN'),w=(s||{}).warmup||{},c=(s||{}).calibration||{},conditioner=(s||{}).conditioner||{},out=(s||{}).output_limit||{},rates=(s||{}).rates||{},health=(s||{}).health||{};let detail='',progress=null;if(state==='WARMING_UP'){const remaining=Math.max(0,Number(w.remaining_seconds)||0),total=Math.max(0,Number(w.configured_seconds)||0),sourceAge=Number(w.source_age_seconds),sourceDetail=Number.isFinite(sourceAge)?` · wiek źródła ${durationShort(Math.max(0,sourceAge))}`:'';detail=(total>0?`pozostało ${durationShort(remaining)} z ${durationShort(total)}`:`pozostało ${durationShort(remaining)}`)+sourceDetail;progress=total>0?(total-remaining)/total:null}else if(state==='CALIBRATING'){const current=Math.max(0,Number(c.pairs)||0),target=Math.max(0,Number(c.target)||0);detail=target>0?`para kalibracyjna ${n(current)} / ${n(target)} · ${percent(100*current/target)}%`:`zebrano ${n(current)} par ramek`;progress=target>0?current/target:null}else if(state==='RUNNING'||state==='OUTPUT_COMPLETE'){const conditionerTarget=Math.max(0,Number(conditioner.target_bytes)||0),useConditioner=conditionerTarget>0,target=useConditioner?conditionerTarget:Math.max(0,Number(out.target_bytes)||0),written=useConditioner?Math.max(0,Number(conditioner.written_bytes)||0):Math.max(0,Number(out.written_bytes)||0);if(target>0){detail=`${useConditioner?'SHA3':'dane'} ${byteSize(written)} / ${byteSize(target)} · ${percent(100*written/target)}%`;progress=written/target}else{detail=`produkcja ${durationShort(rates.production_uptime_seconds)} · ${rate(rates.output_bps_current)}`}}else if(state==='ERROR'||state==='API ERROR'){detail=String((s||{}).error||'błąd workera')}else if(state.endsWith('_FAILED')){detail=String(health.last_failure||(s||{}).error||'etap zatrzymany fail-closed')}else{detail=state==='START'?'uruchamianie workera':''}return{state,detail,progress:progress===null?null:Math.max(0,Math.min(1,Number(progress)||0))}}
 function renderStateHeader(s){const model=stateHeaderModel(s),stateElement=byId('state'),detailElement=byId('stateDetail'),progressElement=byId('stateProgress'),bar=byId('stateProgressBar');const stateClass=['RUNNING','OUTPUT_COMPLETE'].includes(model.state)?'good':(['CALIBRATING','WARMING_UP'].includes(model.state)?'warn':'bad');stateElement.textContent=model.state;stateElement.className=stateClass;detailElement.textContent=model.detail;if(model.progress===null){progressElement.hidden=true;progressElement.removeAttribute('aria-valuenow');bar.style.width='0%'}else{const value=Math.round(model.progress*1000)/10;progressElement.hidden=false;progressElement.className=`state-progress ${stateClass}`;progressElement.setAttribute('aria-valuenow',String(value));bar.style.width=`${value}%`}}
 async function fetchJson(url){const r=await fetch(url,{cache:'no-store'}),t=await r.text();if(!r.ok)throw new Error(`${url}: HTTP ${r.status}: ${t.slice(0,180)}`);return JSON.parse(t)}
 function darkLayout(title,yTitle){return{title:{text:title,font:{size:14}},paper_bgcolor:'#101318',plot_bgcolor:'#101318',font:{color:'#eef2f7'},margin:{l:70,r:25,t:48,b:55},xaxis:{title:'Wartość bajtu',range:[-0.5,255.5],dtick:32,gridcolor:'#303846'},yaxis:{title:yTitle,gridcolor:'#303846'},legend:{orientation:'h',y:-0.22},hovermode:'x unified'}}
@@ -4156,7 +4241,7 @@ let heatmapSequence=-1;
 function renderByteDiagnostics(data){lastByteDiagnostics=data;const stages=(data.stages||[]).slice().sort((a,b)=>(a.rank-b.rank)||String(a.label).localeCompare(String(b.label)));const main=stages.filter(s=>s.group==='main'&&Number(s.total_bytes)>0),direct=main.filter(s=>s.key==='direct_lsb'),mainCore=main.filter(s=>s.key!=='direct_lsb'),dual=stages.filter(s=>s.group==='dual'&&Number(s.total_bytes)>0);drawByteGroup(mainCore,'byteHistogramMain','Odchylenia rozkładu bajtów po etapach czyszczenia');byId('directHistogramPanel').hidden=!direct.length;if(direct.length)drawByteGroup(direct,'byteHistogramDirect','Direct LSB — aktywna maska');byId('byteStageCards').innerHTML=main.map(s=>card(s.label,`${n(s.total_bytes)} B`,`H=${f(s.byte_entropy_bits,6)} · Hmin=${f(s.byte_min_entropy_bits,6)} · mean=${f(s.byte_mean,4)}`)).join('');byId('dualHistogramPanel').hidden=!dual.length;if(dual.length)drawByteGroup(dual,'byteHistogramDual','Dual weave — odchylenia rozkładów bajtów');const hm=data.heatmap||{};if(hm.file&&Number(hm.sequence)!==heatmapSequence){heatmapSequence=Number(hm.sequence);byId('liveHeatmap').src=`/live_byte_heatmaps.png?t=${Date.now()}`}byId('heatmapInfo').textContent=hm.file?`Sekwencja ${hm.sequence} · wygenerowano ${hm.last_generated_utc||'n/a'} · interwał ${hm.interval_seconds}s · maks. ${hm.max_stages} etapów`:`Oczekiwanie: minimum ${n(hm.minimum_bytes_per_stage)} B na etap · interwał ${hm.interval_seconds}s${hm.rendering?' · generowanie w toku':''}`}
 function drawDrift(history,settings){const rows=(history||[]).slice(-720).filter(p=>Number.isFinite(Number(p.active_retention))&&Number.isFinite(Number(p.jaccard)));if(!window.Plotly)return;if(!rows.length){Plotly.purge(byId('driftChart'));byId('driftInfo').textContent='Oczekiwanie na pierwszy punkt dryftu.';return}const x=rows.map((p,i)=>p.timestamp_utc||i),ret=rows.map(p=>100*Number(p.active_retention)),jac=rows.map(p=>100*Number(p.jaccard)),rt=100*Number(settings.shadow_min_active_retention||.95),jt=100*Number(settings.shadow_min_jaccard||.90);const traces=[{type:'scatter',mode:'lines+markers',name:'Retencja aktywnej',x,y:ret,line:{width:2},marker:{size:4},hovertemplate:'%{x}<br>retencja=%{y:.5f}%<extra></extra>'},{type:'scatter',mode:'lines+markers',name:'Jaccard',x,y:jac,line:{width:2},marker:{size:4},hovertemplate:'%{x}<br>Jaccard=%{y:.5f}%<extra></extra>'}];const allValues=[...ret,...jac,rt,jt].filter(v=>Number.isFinite(Number(v))).map(Number);const low=Math.min(...allValues),high=Math.max(...allValues),span=Math.max(0.05,high-low),pad=Math.max(0.05,span*0.12);let y0=Math.max(0,low-pad),y1=Math.min(100,high+pad);if(y1-y0<0.6){const mid=(y0+y1)/2;y0=Math.max(0,mid-0.3);y1=Math.min(100,mid+0.3)}const layout=darkLayout('Retencja aktywnej maski i indeks Jaccarda','[%]');layout.xaxis={title:'Czas / zapis',gridcolor:'#303846'};layout.yaxis={title:'[%]',range:[y0,y1],gridcolor:'#303846'};layout.shapes=[{type:'line',xref:'paper',x0:0,x1:1,y0:rt,y1:rt,line:{dash:'dash',width:1}},{type:'line',xref:'paper',x0:0,x1:1,y0:jt,y1:jt,line:{dash:'dot',width:1}}];safePlotlyReact(byId('driftChart'),traces,layout);const last=rows[rows.length-1];byId('driftInfo').textContent=`Punkty: ${rows.length} · ostatni: ${last.timestamp_utc||'n/a'} · retencja ${f(100*last.active_retention,4)}% · Jaccard ${f(100*last.jaccard,4)}% · bad streak ${n(last.bad_streak)} · zakres osi ${f(y0,3)}…${f(y1,3)}%`}
 __IMAGE_JS__
-async function updateStats(){try{const s=await fetchJson('/api/stats'),l=s.last||{},c=s.calibration||{},h=s.health||{},m=s.shadow_mask||{},a=s.active_mask||{},r=s.rates||{},ctrl=s.camera_controls||{},out=s.output_limit||{},w=s.warmup||{},p=s.pairing||{},dw=s.dual_weave||{},ac=s.active_clipping||{},st=s.source_transport||{};byId('apiError').style.display='none';byId('device').textContent=`${s.device||''} · ${s.mode.fourcc||''} ${s.mode.width||0}×${s.mode.height||0} · ${s.app_version}`;renderStateHeader(s);byId('cards').innerHTML=card('Tryb parowania',`${p.mode||'n/a'} / k=${n(p.lag_frames)}`,`bufor ${n(p.buffered_frames)}/${n(p.conceptual_buffer_frames)} · ${p.phase||''}`)+card('Transport źródła',`gen ${n(st.connection_generation)} · reconnect ${n(st.reconnect_count)}`,`timeout ${n(st.frame_timeout_seconds)} s`)+card('Selekcja przestrzenna',`${(((s.settings||{}).spatial_selection||{}).label)||((s.settings||{}).spatial_sampling)||'n/a'}`)+card('Dual weave',dw.enabled?`${dw.group_sequence||0} grup · ${dw.complete?'COMPLETE':'RUNNING'}`:'wyłączony')+card('Clipping full',f((((ac.scopes||{}).full||{}).rate)),`limit ${f(ac.limit)}`)+card('Clipping even',f((((ac.scopes||{}).even||{}).rate)))+card('Clipping odd',f((((ac.scopes||{}).odd||{}).rate)))+card('Kalibracja',`${n(c.pairs)} / ${n(c.target)}`,c.ready?'zamrożona':'zbieranie')+card('Maska produkcyjna',n(a.production_pixels||m.active_pixels||a.pixels))+card('Shadow maska',n(m.shadow_pixels))+card('Retencja',f(m.active_retention))+card('Jaccard',f(m.jaccard))+card('Niezgodność',f(m.disagreement_rate))+card('P(1) RAW',f(l.raw_change_p1))+card('P(1) po masce',f(l.masked_p1))+card('Von Neumann',(s.settings||{}).von_neumann_stage?n(l.vn_output_bits):'wyłączony',(s.settings||{}).von_neumann_stage?`wydajność ${f(l.vn_efficiency)}`:'temporal SHA3')+card('SHA3',`${n((s.conditioner||{}).written_bytes)} B`,rate((s.conditioner||{}).output_bps_lifetime))+card('RCT/APT',h.latched?'FAIL':'OK',h.last_failure||'')+card('Ekspozycja',n((ctrl.after_open||{}).exposure_time_absolute))+card('Warm-up',w.complete?'zakończony':duration(w.remaining_seconds))+card('Cel danych',out.target_bytes?`${f(100*(out.written_bytes||0)/out.target_bytes,3)}%`:'bez limitu');byId('rateCards').innerHTML=card('Bieżąca',rate(r.output_bps_current))+card('EMA 10 s',rate(r.output_bps_ema_10s))+card('1 s',rate(r.output_bps_1s))+card('10 s',rate(r.output_bps_10s))+card('60 s',rate(r.output_bps_60s))+card('Średnia',rate(r.output_bps_lifetime),duration(r.production_uptime_seconds))+card('RAW 10 s',rate(r.raw_change_bps_10s))+card('Po masce 10 s',rate(r.masked_bps_10s))+card('Packed 10 s',`${f(r.packed_bytes_per_second_10s,2)} B/s`)+card('Zapisano',`${n(r.total_written_bytes)} B`);byId('commandLine').textContent=s.command_line||'';document.querySelector('#parameters tbody').innerHTML=(s.startup_parameters||[]).map(p=>`<tr><td><code>${esc(p.options)}</code><br><small>${esc(p.destination)}</small></td><td><code>${esc(p.value)}</code></td><td><code>${esc(p.default)}</code></td><td><span class="tag">${esc(p.source)}</span></td></tr>`).join('');byId('files').innerHTML=Object.entries(s.files||{}).filter(([,v])=>v).map(([k,v])=>`<a href="/download/${encodeURIComponent(v)}">${esc(k)}: ${esc(v)}</a>`).join(' · ');drawDrift(s.mask_drift_history||[],s.settings||{});refreshImages(w)}catch(error){console.error(error);renderStateHeader({state:'API ERROR',error:error.message});const box=byId('apiError');box.textContent=error.message;box.style.display='block'}}
+async function updateStats(){try{const s=await fetchJson('/api/stats'),l=s.last||{},c=s.calibration||{},h=s.health||{},m=s.shadow_mask||{},a=s.active_mask||{},r=s.rates||{},ctrl=s.camera_controls||{},out=s.output_limit||{},w=s.warmup||{},p=s.pairing||{},dw=s.dual_weave||{},ac=s.active_clipping||{},st=s.source_transport||{};byId('apiError').style.display='none';byId('device').textContent=`${s.device||''} · ${s.mode.fourcc||''} ${s.mode.width||0}×${s.mode.height||0} · ${s.app_version}`;renderStateHeader(s);byId('cards').innerHTML=card('Tryb parowania',`${p.mode||'n/a'} / k=${n(p.lag_frames)}`,`bufor ${n(p.buffered_frames)}/${n(p.conceptual_buffer_frames)} · ${p.phase||''}`)+card('Transport źródła',`gen ${n(st.connection_generation)} · reconnect ${n(st.reconnect_count)}`,`timeout ${n(st.frame_timeout_seconds)} s`)+card('Selekcja przestrzenna',`${(((s.settings||{}).spatial_selection||{}).label)||((s.settings||{}).spatial_sampling)||'n/a'}`)+card('Dual weave',dw.enabled?`${dw.group_sequence||0} grup · ${dw.complete?'COMPLETE':'RUNNING'}`:'wyłączony')+card('Clipping full',f((((ac.scopes||{}).full||{}).rate)),`limit ${f(ac.limit)}`)+card('Clipping even',f((((ac.scopes||{}).even||{}).rate)))+card('Clipping odd',f((((ac.scopes||{}).odd||{}).rate)))+card('Kalibracja',`${n(c.pairs)} / ${n(c.target)}`,c.ready?'zamrożona':'zbieranie')+card('Maska produkcyjna',n(a.production_pixels||m.active_pixels||a.pixels))+card('Shadow maska',n(m.shadow_pixels))+card('Retencja',f(m.active_retention))+card('Jaccard',f(m.jaccard))+card('Niezgodność',f(m.disagreement_rate))+card('P(1) RAW',f(l.raw_change_p1))+card('P(1) po masce',f(l.masked_p1))+card('Von Neumann',(s.settings||{}).von_neumann_stage?n(l.vn_output_bits):'wyłączony',(s.settings||{}).von_neumann_stage?`wydajność ${f(l.vn_efficiency)}`:'temporal SHA3')+card('SHA3',`${n((s.conditioner||{}).written_bytes)} B`,rate((s.conditioner||{}).output_bps_lifetime))+card('RCT/APT',h.latched?'FAIL':'OK',h.last_failure||'')+card('Ekspozycja',n((ctrl.after_open||{}).exposure_time_absolute))+card('Warm-up',w.complete?'zakończony':duration(w.remaining_seconds),Number.isFinite(Number(w.source_age_seconds))?`wiek źródła ${duration(w.source_age_seconds)} · ${w.basis||'source-reported'}`:'timer lokalny workera')+card('Cel danych',out.target_bytes?`${f(100*(out.written_bytes||0)/out.target_bytes,3)}%`:'bez limitu');byId('rateCards').innerHTML=card('Bieżąca',rate(r.output_bps_current))+card('EMA 10 s',rate(r.output_bps_ema_10s))+card('1 s',rate(r.output_bps_1s))+card('10 s',rate(r.output_bps_10s))+card('60 s',rate(r.output_bps_60s))+card('Średnia',rate(r.output_bps_lifetime),duration(r.production_uptime_seconds))+card('RAW 10 s',rate(r.raw_change_bps_10s))+card('Po masce 10 s',rate(r.masked_bps_10s))+card('Packed 10 s',`${f(r.packed_bytes_per_second_10s,2)} B/s`)+card('Zapisano',`${n(r.total_written_bytes)} B`);byId('commandLine').textContent=s.command_line||'';document.querySelector('#parameters tbody').innerHTML=(s.startup_parameters||[]).map(p=>`<tr><td><code>${esc(p.options)}</code><br><small>${esc(p.destination)}</small></td><td><code>${esc(p.value)}</code></td><td><code>${esc(p.default)}</code></td><td><span class="tag">${esc(p.source)}</span></td></tr>`).join('');byId('files').innerHTML=Object.entries(s.files||{}).filter(([,v])=>v).map(([k,v])=>`<a href="/download/${encodeURIComponent(v)}">${esc(k)}: ${esc(v)}</a>`).join(' · ');drawDrift(s.mask_drift_history||[],s.settings||{});refreshImages(w)}catch(error){console.error(error);renderStateHeader({state:'API ERROR',error:error.message});const box=byId('apiError');box.textContent=error.message;box.style.display='block'}}
 async function updateBytes(){try{renderByteDiagnostics(await fetchJson('/api/byte-diagnostics'))}catch(error){console.error('byte diagnostics',error)}}
 const histogramSelector=byId('histogramMode');histogramSelector.value=histogramMode;histogramSelector.addEventListener('change',event=>setHistogramMode(event.target.value));updateStats();updateBytes();setInterval(updateStats,1000);setInterval(updateBytes,2000);
 </script></body></html>'''

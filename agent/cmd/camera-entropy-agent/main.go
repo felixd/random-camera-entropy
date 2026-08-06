@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	appVersion      = "2026.08.05.camera-entropy-go-agent.8.0.4"
+	appVersion      = "2026.08.06.camera-entropy-go-agent.8.0.5"
 	protocolVersion = 1
 	protocolMagic   = "CEYTLS01"
 	maxHeaderBytes  = 64 * 1024
@@ -667,7 +667,7 @@ func tlsConfig(cfg config) (*tls.Config, error) {
 
 func frameHeader(cfg config, f *frame) map[string]any {
 	digest := sha256.Sum256(f.Payload)
-	return map[string]any{"type": "frame", "version": protocolVersion, "source_id": cfg.SourceID, "frame_id": f.ID, "captured_unix_ns": f.UnixNS, "captured_monotonic_ns": f.MonotonicNS, "width": cfg.Width, "height": cfg.Height, "pixel_format": "Y8", "payload_bytes": len(f.Payload), "sha256": hex.EncodeToString(digest[:]), "controls": f.Controls, "control_value_schema": "integer-v1", "dropped_frames": 0}
+	return map[string]any{"type": "frame", "version": protocolVersion, "source_id": cfg.SourceID, "frame_id": f.ID, "captured_unix_ns": f.UnixNS, "captured_monotonic_ns": f.MonotonicNS, "source_warmup_seconds": float64(f.MonotonicNS) / float64(time.Second), "width": cfg.Width, "height": cfg.Height, "pixel_format": "Y8", "payload_bytes": len(f.Payload), "sha256": hex.EncodeToString(digest[:]), "controls": f.Controls, "control_value_schema": "integer-v1", "dropped_frames": 0}
 }
 
 func writeAgentError(conn *tls.Conn, cfg config, sessionID uint64, code, reason string, retryable bool) {

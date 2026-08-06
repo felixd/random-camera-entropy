@@ -26,9 +26,10 @@ The `frames.csv` row is the commit marker. A reader never guesses available byte
 
 ## Start the continuously warmed USB agent
 
-Install the Go agent on the camera host:
+Build the Go agent as the local user, then install the verified binary with elevated privileges:
 
 ```bash
+./agent/build.sh
 sudo ./agent/install.sh
 ```
 

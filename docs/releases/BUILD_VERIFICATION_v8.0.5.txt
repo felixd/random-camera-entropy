@@ -1,0 +1,25 @@
+Camera Entropy Distributed 8.0.5 — build verification
+Date: 2026-08-06
+
+PASS: Python regression tests: 35/35 tests/selftest*.py
+PASS: source warm-up accounting regression (hello-only v8.0.4 compatibility)
+PASS: worker WWW state-header regression with source age
+PASS: Go unit tests: go test ./...
+PASS: Go static analysis: go vet ./...
+PASS: local-user build boundary: agent/build.sh
+PASS: embedded Go agent version: 2026.08.06.camera-entropy-go-agent.8.0.5
+PASS: Bash syntax for all *.sh
+PASS: JSON syntax for all project JSON files
+
+Built test binary SHA-256:
+b6b331b03efec85fb49ca838d6ea95f6e7738719f8bed253028c94daf50a35ae
+
+Packaging policy:
+The test binary is intentionally excluded from the release archive. Build it on
+the target host as the local user with ./agent/build.sh, then install it with
+sudo ./agent/install.sh.
+
+Environment note:
+tests/control_selftest.py was not executed in the build sandbox because Flask is
+not installed there. The 35 tests/selftest*.py regressions, including control
+payload/layout checks, all passed.

@@ -1,6 +1,6 @@
-# Camera Entropy Distributed 8.0.4
+# Camera Entropy Distributed 8.0.5
 
-System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.4 rozdziela lokalną kompilację agenta Go od instalacji systemowej: `build.sh` działa jako zwykły użytkownik, a `install.sh` uruchamiany przez `sudo` instaluje i weryfikuje wyłącznie gotowe binarium.
+System do pozyskiwania niekompresowanych klatek Y8 z kamery, budowania źródła szumu, wykonywania health testów, kondycjonowania SHA3-512 oraz kwalifikacji źródła. Wersja 8.0.5 zalicza rzeczywisty warm-up wykonany przez zdalny agent kamery: worker wykorzystuje wartość z `hello`, agent przesyła aktualny `source_warmup_seconds` w każdej ramce, a WWW pokazuje wiek źródła i efektywny czas pozostały.
 
 > To oprogramowanie badawcze. Dobre wyniki statystyczne i brak RCT/APT failures nie są automatycznie formalną certyfikacją SP 800-90B.
 

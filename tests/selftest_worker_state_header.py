@@ -39,7 +39,7 @@ def main() -> int:
             "name": "warmup",
             "status": {
                 "state": "WARMING_UP",
-                "warmup": {"remaining_seconds": 41.2, "configured_seconds": 60},
+                "warmup": {"remaining_seconds": 41.2, "configured_seconds": 60, "source_age_seconds": 18.8},
             },
         },
         {
@@ -92,7 +92,7 @@ console.log(JSON.stringify({{models,rendered:elements}}));
     models = payload["models"]
 
     warmup = models["warmup"]
-    assert warmup["detail"] == "pozostało 42s z 1m 0s", warmup
+    assert warmup["detail"] == "pozostało 42s z 1m 0s · wiek źródła 19s", warmup
     assert abs(float(warmup["progress"]) - (18.8 / 60.0)) < 1e-9, warmup
 
     calibration = models["calibration"]

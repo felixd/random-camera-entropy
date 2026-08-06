@@ -17,4 +17,4 @@ def release_version() -> str:
 
 
 def component_version(component: str) -> str:
-    return f"2026.08.05.{component}.{release_version()}"
+    return f"2026.08.06.{component}.{release_version()}"

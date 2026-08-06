@@ -35,6 +35,8 @@ continuous_capture=true
 idle_buffering=false
 ```
 
+Od wersji 8.0.5 każda ramka CEYTLS01 również zawiera aktualne `source_warmup_seconds`. Worker najpierw zalicza wartość z `hello` (zgodność z agentem 8.0.4), a następnie koryguje ją na podstawie kolejnych ramek. Jeżeli źródło nie raportuje wieku, pozostaje pełny lokalny timer fail-closed.
+
 ## Dlaczego Y8, a nie H.264/JPEG
 
 Kwalifikacja źródła dotyczy bezpośrednich bajtów luminancji Y z YUYV. Stratne kodowanie stworzyłoby inny model źródła, zależny od predykcji i kwantyzacji kodeka. TLS-Y zachowuje jeden bajt Y na piksel bez ponownego kodowania.
